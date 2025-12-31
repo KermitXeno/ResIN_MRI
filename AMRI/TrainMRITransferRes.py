@@ -16,13 +16,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 import pandas as pd
+
+base_dir = os.path.dirname(os.path.abspath(__file__))
+
 #kaggle
-#import kaggle
-#from kaggle.api.kaggle_api_extended import KaggleApi
-#api = KaggleApi()
-#api.authenticate()
-#path = api.dataset_download_files("lukechugh/best-alzheimer-mri-dataset-99-accuracy", path='./ModelTraining/AMRI/data/', unzip=True)
-#print("Done downloading dataset")
+import kaggle
+from kaggle.api.kaggle_api_extended import KaggleApi
+api = KaggleApi()
+api.authenticate()
+pathdata = os.path.join(base_dir, 'data')
+path = api.dataset_download_files("lukechugh/best-alzheimer-mri-dataset-99-accuracy", path=pathdata, unzip=True)
+print("Done downloading dataset")
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
 

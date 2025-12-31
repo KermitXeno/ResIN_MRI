@@ -14,13 +14,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 import pandas as pd
+
+base_dir = os.path.dirname(os.path.abspath(__file__))
+
 #kaggle
-#import kaggle
-#from kaggle.api.kaggle_api_extended import KaggleApi
-#api = KaggleApi()
-#api.authenticate()
-#path = api.dataset_download_files("lukechugh/best-alzheimer-mri-dataset-99-accuracy", path='./ModelTraining/AMRI/data/', unzip=True)
-#print("Done downloading dataset")
+import kaggle
+from kaggle.api.kaggle_api_extended import KaggleApi
+api = KaggleApi()
+api.authenticate()
+pathdata = os.path.join(base_dir, 'data')
+path = api.dataset_download_files("lukechugh/best-alzheimer-mri-dataset-99-accuracy", path=pathdata, unzip=True)
+print("Done downloading dataset")
 
 class BottleneckSELU(tf.keras.layers.Layer):
     def __init__(self, out_channels, stride=1):
@@ -34,27 +38,16 @@ class BottleneckSELU(tf.keras.layers.Layer):
 
         self.shortcut = None
 
-        if stride != 1:
-            self.shortcut = Conv2D(
-                out_channels, 1, strides=stride,
-                kernel_initializer="lecun_normal"
-            )
+        if self.stride != 1 or input_shape[-1] != self.out_channels:
+            self.shortcut = Conv2D(self.out_channels, 1, strides=self.stride,padding="same", kernel_initializer="lecun_normal")
 
     def call(self, x):
         residual = x if self.shortcut is None else self.shortcut(x)
         return self.conv(x) + residual      
 
-class InceptSELU(tf.keras.layers.Layer):
-    def __init__(self, out_channels):
-        super().__init__()
-    def call(self, x):
-        return self.conv(x)
-
-
-
+#TODO INCEPTION CLASS
 
 def main():
-    base_dir = os.path.dirname(os.path.abspath(__file__))
 
     pathte = os.path.join(base_dir, 'data', 'Combined Dataset', 'train')
     pathtr = os.path.join(base_dir, 'data', 'Combined Dataset', 'test')
@@ -83,12 +76,14 @@ def main():
     )
 
     def process(image, label):
-        image = tf.cast(image, tf.float32) / 255.0
+        image = tf.cast(image, tf.float32)
+        image = (image - 127.5) / 127.5
         return image, label
 
     train = train_data.map(process).prefetch(tf.data.AUTOTUNE)
     test = test_data.map(process).prefetch(tf.data.AUTOTUNE)
 
+    #model arch
     def build_model(num_classes):
         inputs = Input(shape=(128, 128, 3))
 
@@ -107,7 +102,8 @@ def main():
 
         return Model(inputs, outputs)
 
-    model = build_model(num_classes=train_data.cardinality().numpy())
+    num_classes = len(train_data.class_names)
+    model = build_model(num_classes=len(train_data.class_names))
 
     ES = EarlyStopping(
         monitor="val_loss",
@@ -122,14 +118,13 @@ def main():
         filepath=pathsa,
         monitor="val_loss",
         save_best_only=True,
-        mode="auto",
         verbose=1,
-        save_freq=14,
+        save_freq="epoch",
 
     )
-    optimizer = tf.keras.optimizers.SGD(learning_rate=0.00015)
+    optimizer = tf.keras.optimizers.Adam(learning_rate=1e-3)
     model.compile(optimizer = optimizer, loss = 'sparse_categorical_crossentropy', metrics = ['accuracy'])
-    fitted = model.fit(train, batch_size = 32, epochs = 42, validation_data = test, callbacks = [ES, MC])
+    model.fit(train, batch_size = 32, epochs = 256, validation_data = test, callbacks = [ES, MC])
 
     model.save(pathsa)
  
