@@ -29,21 +29,38 @@ print("Done downloading dataset")
 class BottleneckSELU(tf.keras.layers.Layer):
     def __init__(self, out_channels, stride=1):
         super().__init__()
+        self.out_channels = out_channels
+        self.stride = stride
 
-        self.conv = Sequential([
-            Conv2D(out_channels, 1, activation='selu', strides=1, padding="same", kernel_initializer="lecun_normal"),
-            Conv2D(out_channels, 3,  activation='selu', strides=stride, padding="same", kernel_initializer="lecun_normal"),
-            Conv2D(out_channels, 1, activation='selu', strides=1, padding="same", kernel_initializer="lecun_normal"),
-        ])
+        self.act1 = Activation("selu")
+        self.conv1 = Conv2D(out_channels, 1, kernel_initializer="lecun_normal")
+
+        self.act2 = Activation("selu")
+        self.conv2 = Conv2D(out_channels, 3, strides=stride,
+                            padding="same", kernel_initializer="lecun_normal")
+
+        self.act3 = Activation("selu")
+        self.conv3 = Conv2D(out_channels, 1, kernel_initializer="lecun_normal")
 
         self.shortcut = None
 
+    def build(self, input_shape):
         if self.stride != 1 or input_shape[-1] != self.out_channels:
-            self.shortcut = Conv2D(self.out_channels, 1, strides=self.stride,padding="same", kernel_initializer="lecun_normal")
+            self.shortcut = Conv2D(
+                self.out_channels, 1, strides=self.stride,
+                padding="same", kernel_initializer="lecun_normal"
+            )
 
     def call(self, x):
-        residual = x if self.shortcut is None else self.shortcut(x)
-        return self.conv(x) + residual      
+        y = self.act1(x)
+        y = self.conv1(y)
+        y = self.act2(y)
+        y = self.conv2(y)
+        y = self.act3(y)
+        y = self.conv3(y)
+
+        shortcut = x if self.shortcut is None else self.shortcut(x)
+        return y + shortcut
 
 #TODO INCEPTION CLASS
 
@@ -89,15 +106,15 @@ def main():
 
         x = Conv2D(64, 3, activation='selu', padding="same", kernel_initializer="lecun_normal")(inputs)
 
-        x = BottleneckSELU(128, stride=2)(x)
+        x = BottleneckSELU(64)(x)
+        x = BottleneckSELU(64)(x)
         x = BottleneckSELU(128)(x)
-        x = AlphaDropout(0.2)(x)
-
-        x = BottleneckSELU(256, stride=2)(x)
-        x = BottleneckSELU(256)(x)
-        x = AlphaDropout(0.2)(x)
+        x = BottleneckSELU(128)(x)
 
         x = GlobalAveragePooling2D()(x)
+
+        x = AlphaDropout(0.2)(x)
+
         outputs = Dense(num_classes, activation="softmax")(x)
 
         return Model(inputs, outputs)
@@ -108,7 +125,7 @@ def main():
     ES = EarlyStopping(
         monitor="val_loss",
         min_delta=0.01,
-        patience=10,
+        patience=16,
         verbose=1,
         mode="auto",
         restore_best_weights=True,
