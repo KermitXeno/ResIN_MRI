@@ -2,29 +2,29 @@
 """
 @author: elamr
 
+@dataset{alzheimer_mri_dataset,
+  author = {Falah.G.Salieh},
+  title = {Alzheimer MRI Dataset},
+  year = {2023},
+  publisher = {Hugging Face},
+  version = {1.0},
+  url = {https://huggingface.co/datasets/Falah/Alzheimer_MRI}
+}
+
 """
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras.models import Model, Sequential 
 from tensorflow.keras.layers import *
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
-from tensorflow.keras.applications import ResNet50V2
 from tensorflow.keras import regularizers
-import matplotlib.pyplot as plt
+import pyarrow.parquet as pq
 import numpy as np
+from PIL import Image
 import os
-import pandas as pd
+import io
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
-
-#kaggle
-import kaggle
-from kaggle.api.kaggle_api_extended import KaggleApi
-api = KaggleApi()
-api.authenticate()
-pathdata = os.path.join(base_dir, 'data')
-path = api.dataset_download_files("lukechugh/best-alzheimer-mri-dataset-99-accuracy", path=pathdata, unzip=True)
-print("Done downloading dataset")
 
 class BottleneckSELU(tf.keras.layers.Layer):
     def __init__(self, out_channels, stride=1):
@@ -60,45 +60,44 @@ class BottleneckSELU(tf.keras.layers.Layer):
         y = self.conv3(y)
 
         shortcut = x if self.shortcut is None else self.shortcut(x)
-        return y + shortcut
+        return shortcut + 0.1 * y
 
 #TODO INCEPTION CLASS
 
 def main():
 
-    pathte = os.path.join(base_dir, 'data', 'Combined Dataset', 'train')
-    pathtr = os.path.join(base_dir, 'data', 'Combined Dataset', 'test')
-    pathsa = os.path.join(base_dir, 'weights', 'AMRI.keras')
+    dataloc = os.path.join(base_dir, 'data')
+    table = pq.read_table(dataloc)
+    pathsave = os.path.join(base_dir, 'weights', 'AMRI.keras')
 
-    train_data = keras.utils.image_dataset_from_directory(
-        directory=pathte,
-        labels='inferred',
-        label_mode='int',
-        batch_size=32,
-        image_size=(128, 128),
-        color_mode='rgb',
-        shuffle=True,
-        verbose=True
-    )
+    num_samples = table.num_rows
 
-    test_data = keras.utils.image_dataset_from_directory(
-        directory=pathtr,
-        labels='inferred',
-        label_mode='int',
-        batch_size=32,
-        image_size=(128, 128),
-        color_mode='rgb',
-        shuffle=True,
-        verbose=True
-    )
+    def parquet_generator():
+        for row in table.to_pylist():
+            img = row["image"]
+            label = row["label"]
 
-    def process(image, label):
-        image = tf.cast(image, tf.float32)
-        image = (image - 127.5) / 127.5
-        return image, label
+            if isinstance(img, (bytes, bytearray)):
+                img = Image.open(io.BytesIO(img))
+            else:
+                img = Image.fromarray(img)
 
-    train = train_data.map(process).prefetch(tf.data.AUTOTUNE)
-    test = test_data.map(process).prefetch(tf.data.AUTOTUNE)
+            img = np.array(img, dtype=np.float32)
+            img = (img - 127.5) / 127.5
+
+            yield img, np.int32(label)
+
+    dataset = tf.data.Dataset.from_generator(parquet_generator,output_signature=(tf.TensorSpec(shape=(None, None, 3), dtype=tf.float32),tf.TensorSpec(shape=(), dtype=tf.int32),))
+    dataset = (dataset.shuffle(buffer_size=num_samples, seed=67, reshuffle_each_iteration=False).map(lambda x, y: (tf.image.resize(x, (128, 128)), y), num_parallel_calls=tf.data.AUTOTUNE).batch(32).prefetch(tf.data.AUTOTUNE))
+    dataset = dataset.shuffle(num_samples, seed=67, reshuffle_each_iteration=False)
+
+    train_size = int(0.8 * num_samples)
+
+    train = dataset.take(train_size)
+    test  = dataset.skip(train_size)
+
+    train = (train.map(lambda x, y: (tf.image.resize(x, (128, 128)), y)).batch(32).prefetch(tf.data.AUTOTUNE))
+    test = (test.map(lambda x, y: (tf.image.resize(x, (128, 128)), y)).batch(32).prefetch(tf.data.AUTOTUNE))
 
     #model arch
     def build_model(num_classes):
@@ -107,20 +106,21 @@ def main():
         x = Conv2D(64, 3, activation='selu', padding="same", kernel_initializer="lecun_normal")(inputs)
 
         x = BottleneckSELU(64)(x)
-        x = BottleneckSELU(64)(x)
+        x = BottleneckSELU(64, stride=2)(x)
         x = BottleneckSELU(128)(x)
-        x = BottleneckSELU(128)(x)
+        x = BottleneckSELU(128, stride=2)(x)
+
+        x = AlphaDropout(0.15)(x)
 
         x = GlobalAveragePooling2D()(x)
 
-        x = AlphaDropout(0.2)(x)
-
-        outputs = Dense(num_classes, activation="softmax")(x)
+        outputs = Dense(num_classes, activation="softmax", kernel_initializer="lecun_normal")(x)
 
         return Model(inputs, outputs)
 
-    num_classes = len(train_data.class_names)
-    model = build_model(num_classes=len(train_data.class_names))
+    labels = table.column("label").to_numpy()
+    num_classes = int(labels.max() + 1)
+    model = build_model(num_classes)
 
     ES = EarlyStopping(
         monitor="val_loss",
@@ -132,7 +132,7 @@ def main():
         start_from_epoch=0,
     )
     MC = ModelCheckpoint(
-        filepath=pathsa,
+        filepath=pathsave,
         monitor="val_loss",
         save_best_only=True,
         verbose=1,
@@ -141,9 +141,9 @@ def main():
     )
     optimizer = tf.keras.optimizers.Adam(learning_rate=1e-3)
     model.compile(optimizer = optimizer, loss = 'sparse_categorical_crossentropy', metrics = ['accuracy'])
-    model.fit(train, batch_size = 32, epochs = 256, validation_data = test, callbacks = [ES, MC])
+    model.fit(train, epochs=256, validation_data=test, callbacks=[ES, MC])
 
-    model.save(pathsa)
+    model.save(pathsave)
  
 if __name__ == "__main__":
     main()
