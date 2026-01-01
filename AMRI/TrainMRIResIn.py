@@ -27,28 +27,28 @@ import io
 base_dir = os.path.dirname(os.path.abspath(__file__))
 
 class BottleneckSELU(tf.keras.layers.Layer):
-    def __init__(self, out_channels, stride=1):
+    def __init__(self, out_channels, stride = 1):
         super().__init__()
         self.out_channels = out_channels
         self.stride = stride
 
         self.act1 = Activation("selu")
-        self.conv1 = Conv2D(out_channels, 1, kernel_initializer="lecun_normal")
+        self.conv1 = Conv2D(out_channels, 1, kernel_initializer = "lecun_normal")
 
         self.act2 = Activation("selu")
-        self.conv2 = Conv2D(out_channels, 3, strides=stride,
-                            padding="same", kernel_initializer="lecun_normal")
+        self.conv2 = Conv2D(out_channels, 3, strides = stride,
+                            padding = "same", kernel_initializer = "lecun_normal")
 
         self.act3 = Activation("selu")
-        self.conv3 = Conv2D(out_channels, 1, kernel_initializer="lecun_normal")
+        self.conv3 = Conv2D(out_channels, 1, kernel_initializer = "lecun_normal")
 
         self.shortcut = None
 
     def build(self, input_shape):
         if self.stride != 1 or input_shape[-1] != self.out_channels:
             self.shortcut = Conv2D(
-                self.out_channels, 1, strides=self.stride,
-                padding="same", kernel_initializer="lecun_normal"
+                self.out_channels, 1, strides = self.stride,
+                padding = "same", kernel_initializer = "lecun_normal"
             )
 
     def call(self, x):
@@ -62,7 +62,36 @@ class BottleneckSELU(tf.keras.layers.Layer):
         shortcut = x if self.shortcut is None else self.shortcut(x)
         return shortcut + 0.1 * y
 
-#TODO INCEPTION CLASS
+class SELUInception(tf.keras.layers.Layer):
+    def __init__(self, filters):
+        super().__init__()
+
+        self.b1 = Sequential([
+            Conv2D(filters, 1, padding = "same", activation = 'selu', kernel_initializer = "lecun_normal"),
+        ])
+
+        self.b2 = Sequential([
+            Conv2D(filters, 1, padding = "same", activation = 'selu', kernel_initializer = "lecun_normal"),
+            Conv2D(filters, 4, padding = "same", activation = 'selu', kernel_initializer = "lecun_normal")
+        ])
+
+        self.b3 = Sequential([
+            Conv2D(filters, 1, padding = "same", activation = 'selu', kernel_initializer = "lecun_normal"),
+            Conv2D(filters, 8, padding = "same", activation = 'selu', kernel_initializer = "lecun_normal"),
+        ])
+
+        self.b4 = Sequential([
+            AveragePooling2D(pool_size = 3, strides = 1, padding = "same"),
+            Conv2D(filters, 1, padding = "same", activation = 'selu', kernel_initializer = "lecun_normal"),
+        ])
+
+    def call(self, x):
+        return Concatenate(axis = -1)([
+            self.b1(x),
+            self.b2(x),
+            self.b3(x),
+            self.b4(x)
+        ])
 
 def main():
 
@@ -77,38 +106,61 @@ def main():
             img = row["image"]
             label = row["label"]
 
-            if isinstance(img, (bytes, bytearray)):
+            if isinstance(img, dict):
+                if "bytes" in img:
+                    img = Image.open(io.BytesIO(img["bytes"]))
+                elif "data" in img and "shape" in img:
+                    arr = np.array(img["data"], dtype = np.uint8)
+                    arr = arr.reshape(img["shape"])
+                    img = Image.fromarray(arr)
+                else:
+                    raise ValueError(f"Unknown image dict format: {img.keys()}")
+            elif isinstance(img, (bytes, bytearray)):
                 img = Image.open(io.BytesIO(img))
             else:
                 img = Image.fromarray(img)
 
-            img = np.array(img, dtype=np.float32)
+            img = np.array(img, dtype = np.float32)
+
+            if img.ndim == 2:                     
+                img = np.stack([img] * 3, axis = -1)
+            elif img.ndim == 3 and img.shape[-1] == 1:  
+                img = np.repeat(img, 3, axis = -1)
+
             img = (img - 127.5) / 127.5
 
             yield img, np.int32(label)
 
-    dataset = tf.data.Dataset.from_generator(parquet_generator,output_signature=(tf.TensorSpec(shape=(None, None, 3), dtype=tf.float32),tf.TensorSpec(shape=(), dtype=tf.int32),))
-    dataset = (dataset.shuffle(buffer_size=num_samples, seed=67, reshuffle_each_iteration=False).map(lambda x, y: (tf.image.resize(x, (128, 128)), y), num_parallel_calls=tf.data.AUTOTUNE).batch(32).prefetch(tf.data.AUTOTUNE))
-    dataset = dataset.shuffle(num_samples, seed=67, reshuffle_each_iteration=False)
+    dataset = tf.data.Dataset.from_generator(
+    parquet_generator,
+    output_signature = (tf.TensorSpec(shape = (None, None, 3), dtype = tf.float32),tf.TensorSpec(shape = (), dtype=tf.int32),),)
+
+    dataset = dataset.shuffle(num_samples, seed=67, reshuffle_each_iteration = False)
 
     train_size = int(0.8 * num_samples)
-
     train = dataset.take(train_size)
     test  = dataset.skip(train_size)
 
-    train = (train.map(lambda x, y: (tf.image.resize(x, (128, 128)), y)).batch(32).prefetch(tf.data.AUTOTUNE))
-    test = (test.map(lambda x, y: (tf.image.resize(x, (128, 128)), y)).batch(32).prefetch(tf.data.AUTOTUNE))
+    def preprocess(x, y):
+        x = tf.image.resize(x, (128, 128))
+        return x, y
+
+    train = (train.map(preprocess, num_parallel_calls = tf.data.AUTOTUNE).batch(32).repeat().prefetch(tf.data.AUTOTUNE))
+    test = (test.map(preprocess, num_parallel_calls = tf.data.AUTOTUNE).batch(32).prefetch(tf.data.AUTOTUNE))
 
     #model arch
     def build_model(num_classes):
-        inputs = Input(shape=(128, 128, 3))
+        inputs = Input(shape = (128, 128, 3))
 
-        x = Conv2D(64, 3, activation='selu', padding="same", kernel_initializer="lecun_normal")(inputs)
+        x = Conv2D(64, 3, activation = 'selu', padding = "same", kernel_initializer = "lecun_normal")(inputs)
 
         x = BottleneckSELU(64)(x)
         x = BottleneckSELU(64, stride=2)(x)
+        x = SELUInception(64)(x)
+
         x = BottleneckSELU(128)(x)
         x = BottleneckSELU(128, stride=2)(x)
+        x = SELUInception(128)(x)
 
         x = AlphaDropout(0.15)(x)
 
@@ -123,25 +175,27 @@ def main():
     model = build_model(num_classes)
 
     ES = EarlyStopping(
-        monitor="val_loss",
-        min_delta=0.01,
-        patience=16,
-        verbose=1,
-        mode="auto",
-        restore_best_weights=True,
-        start_from_epoch=0,
+        monitor = "val_loss",
+        min_delta = 0.01,
+        patience = 16,
+        verbose = 1,
+        mode = "auto",
+        restore_best_weights = True,
+        start_from_epoch = 0,
     )
     MC = ModelCheckpoint(
-        filepath=pathsave,
-        monitor="val_loss",
-        save_best_only=True,
-        verbose=1,
-        save_freq="epoch",
+        filepath = pathsave,
+        monitor = "val_loss",
+        save_best_only = True,
+        verbose = 1,
+        save_freq = "epoch",
 
     )
-    optimizer = tf.keras.optimizers.Adam(learning_rate=1e-3)
+    steps_per_epoch = train_size // 32
+    validation_steps = (num_samples - train_size) // 32
+    optimizer = tf.keras.optimizers.Adam(learning_rate = 1e-3)
     model.compile(optimizer = optimizer, loss = 'sparse_categorical_crossentropy', metrics = ['accuracy'])
-    model.fit(train, epochs=256, validation_data=test, callbacks=[ES, MC])
+    model.fit(train, epochs = 128, steps_per_epoch = steps_per_epoch, validation_data = test, validation_steps = validation_steps, callbacks = [ES, MC],)
 
     model.save(pathsave)
  
