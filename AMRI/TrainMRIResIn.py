@@ -63,35 +63,52 @@ class BottleneckSELU(tf.keras.layers.Layer):
         return shortcut + 0.1 * y
 
 class SELUInception(tf.keras.layers.Layer):
-    def __init__(self, filters):
+    def __init__(self, out_channels):
         super().__init__()
+        self.out_channels = out_channels
+        assert out_channels % 4 == 0, "out_channels must be divisible by 4"
 
-        self.b1 = Sequential([
-            Conv2D(filters, 1, padding = "same", activation = 'selu', kernel_initializer = "lecun_normal"),
-        ])
+        branch_channels = out_channels // 4
+
+        self.b1 = Conv2D(branch_channels, 1, activation = "selu", kernel_initializer = "lecun_normal", padding = "same")
 
         self.b2 = Sequential([
-            Conv2D(filters, 1, padding = "same", activation = 'selu', kernel_initializer = "lecun_normal"),
-            Conv2D(filters, 4, padding = "same", activation = 'selu', kernel_initializer = "lecun_normal")
+            Conv2D(branch_channels, 1, activation = "selu", kernel_initializer = "lecun_normal", padding = "same"),
+            DepthwiseConv2D(3, padding = "same", depthwise_initializer = "lecun_normal"),
+            Conv2D(branch_channels, 1, activation = "selu", kernel_initializer = "lecun_normal", padding = "same")
         ])
 
         self.b3 = Sequential([
-            Conv2D(filters, 1, padding = "same", activation = 'selu', kernel_initializer = "lecun_normal"),
-            Conv2D(filters, 8, padding = "same", activation = 'selu', kernel_initializer = "lecun_normal"),
+            Conv2D(branch_channels, 1, activation = "selu", kernel_initializer = "lecun_normal", padding = "same"),
+            DepthwiseConv2D(5, padding="same", depthwise_initializer = "lecun_normal"),
+            Conv2D(branch_channels, 1, activation = "selu", kernel_initializer = "lecun_normal", padding = "same")
         ])
 
         self.b4 = Sequential([
             AveragePooling2D(pool_size = 3, strides = 1, padding = "same"),
-            Conv2D(filters, 1, padding = "same", activation = 'selu', kernel_initializer = "lecun_normal"),
+            Conv2D(branch_channels, 1, activation = "selu", kernel_initializer = "lecun_normal", padding = "same")
         ])
 
+        self.residual = None
+
+    def build(self, input_shape):
+        in_channels = input_shape[-1]
+        if in_channels != self.out_channels:
+            self.residual = Conv2D(self.out_channels, 1, padding = "same", kernel_initializer = "lecun_normal")
+
     def call(self, x):
-        return Concatenate(axis = -1)([
-            self.b1(x),
-            self.b2(x),
-            self.b3(x),
-            self.b4(x)
-        ])
+
+        y1 = self.b1(x)
+        y2 = self.b2(x)
+        y3 = self.b3(x)
+        y4 = self.b4(x)
+
+        out = tf.concat([y1, y2, y3, y4], axis = -1)
+
+        if self.residual is not None:
+            x = self.residual(x)
+
+        return out + 0.1 * out 
 
 def main():
 
@@ -161,6 +178,10 @@ def main():
         x = BottleneckSELU(128)(x)
         x = BottleneckSELU(128, stride=2)(x)
         x = SELUInception(128)(x)
+
+        x = BottleneckSELU(256)(x)
+        x = BottleneckSELU(256, stride=2)(x)
+        x = SELUInception(256)(x)
 
         x = AlphaDropout(0.15)(x)
 
