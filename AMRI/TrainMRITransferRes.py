@@ -1,119 +1,130 @@
 # -*- coding: utf-8 -*-
 """
 @author: elamr
-This is a transference learning implementation using ResNet50V2 with imagenet weights for Alzheimer's MRI classification.
+This is a transfer learning implementation using ResNet50V2 with imagenet weights for Alzheimer's MRI classification.
 
 """
 import tensorflow as tf
-from tensorflow import keras
-from tensorflow.keras import models
-from tensorflow.keras.layers import Dense, Dropout, Flatten
-from tensorflow.keras.applications.resnet import preprocess_input
-from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
+from tensorflow.keras import Model
+from tensorflow.keras.layers import *
 from tensorflow.keras.applications import ResNet50V2
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 from tensorflow.keras import regularizers
-import matplotlib.pyplot as plt
+import pyarrow.parquet as pq
 import numpy as np
-import os
-import pandas as pd
+from PIL import Image
+import os, io
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
 
-#kaggle
-import kaggle
-from kaggle.api.kaggle_api_extended import KaggleApi
-api = KaggleApi()
-api.authenticate()
-pathdata = os.path.join(base_dir, 'data')
-path = api.dataset_download_files("lukechugh/best-alzheimer-mri-dataset-99-accuracy", path=pathdata, unzip=True)
-print("Done downloading dataset")
+dataloc = os.path.join(base_dir, 'data')
+table = pq.read_table(dataloc)
+pathsave = os.path.join(base_dir, 'weights', 'AMRI.keras')
 
-base_dir = os.path.dirname(os.path.abspath(__file__))
+num_samples = table.num_rows
 
-pathte = os.path.join(base_dir, 'data', 'Combined Dataset', 'train')
-pathtr = os.path.join(base_dir, 'data', 'Combined Dataset', 'test')
-pathsa = os.path.join(base_dir, 'weights', 'AMRI.keras')
+def parquet_generator():
+    for row in table.to_pylist():
+        img = row["image"]
+        label = row["label"]
 
-train_data = keras.utils.image_dataset_from_directory(
-    directory=pathte,
-    labels='inferred',
-    label_mode='int',
-    batch_size=32,
-    image_size=(128, 128),
-    color_mode='rgb',
-    shuffle=True,
-    verbose=True
-)
+        if isinstance(img, dict):
+            if "bytes" in img:
+                img = Image.open(io.BytesIO(img["bytes"]))
+            elif "data" in img and "shape" in img:
+                arr = np.array(img["data"], dtype = np.uint8)
+                arr = arr.reshape(img["shape"])
+                img = Image.fromarray(arr)
+            else:
+                raise ValueError(f"Unknown image dict format: {img.keys()}")
+        elif isinstance(img, (bytes, bytearray)):
+            img = Image.open(io.BytesIO(img))
+        else:
+            img = Image.fromarray(img)
 
-test_data = keras.utils.image_dataset_from_directory(
-    directory=pathtr,
-    labels='inferred',
-    label_mode='int',
-    batch_size=32,
-    image_size=(128, 128),
-    color_mode='rgb',
-    shuffle=True,
-    verbose=True
-)
+        img = np.array(img, dtype = np.float32)
 
-def process(image, label):
-    image = preprocess_input(image)
-    return image, label
+        if img.ndim == 2:                     
+            img = np.stack([img] * 3, axis = -1)
+        elif img.ndim == 3 and img.shape[-1] == 1:  
+            img = np.repeat(img, 3, axis = -1)
 
+        img = (img - 127.5) / 127.5
+
+        yield img, np.int32(label)
+
+dataset = tf.data.Dataset.from_generator(parquet_generator,output_signature = (tf.TensorSpec(shape = (None, None, 3), dtype = tf.float32),tf.TensorSpec(shape = (), dtype=tf.int32),),)
+dataset = dataset.shuffle(num_samples, seed = 67, reshuffle_each_iteration = False)
+
+train_size = int(0.8 * num_samples)
+train = dataset.take(train_size)
+test  = dataset.skip(train_size)
+
+def preprocess(x, y):
+    x = tf.image.resize(x, (128, 128))
+    return x, y
+
+train = (train.map(preprocess, num_parallel_calls = tf.data.AUTOTUNE).batch(32).repeat().prefetch(tf.data.AUTOTUNE))
+test = (test.map(preprocess, num_parallel_calls = tf.data.AUTOTUNE).batch(32).prefetch(tf.data.AUTOTUNE))
+
+def resnet50v2_selu(num_classes):
+
+    EXTModel = ResNet50V2(
+        include_top = False,
+        weights = "imagenet",
+        input_shape = (128, 128, 3)
+    )
+
+    EXTModel.trainable = True
+
+    x = EXTModel.output
+    x = GlobalAveragePooling2D()(x)
+
+    x = Dense(256, activation = "selu", kernel_initializer = "lecun_normal", kernel_regularizer = regularizers.l2(5e-4))(x)
+    x = AlphaDropout(0.1)(x)
+
+    x = Dense(128, activation = "selu", kernel_initializer = "lecun_normal", kernel_regularizer = regularizers.l2(5e-4))(x)
+    x = AlphaDropout(0.1)(x)
+
+    outputs = Dense(num_classes, activation = "softmax", kernel_initializer = "lecun_normal" )(x)
+
+    return Model(EXTModel.input, outputs)
 
 def main():
 
-    train = train_data.map(process)
-    test = test_data.map(process)
+    data_path = os.path.join(base_dir, "data")
+    save_path = os.path.join(base_dir, "weights", "AMRI_resnet50v2.keras")
 
-    EXTmodel = ResNet50V2(
-        include_top=False,
-        weights="imagenet",
-        input_shape=(128, 128, 3),
-        classes=4 
+    labels = pq.read_table(data_path).column("label").to_numpy()
+    num_classes = int(labels.max() + 1)
+
+    model = resnet50v2_selu(num_classes)
+
+    model.compile(optimizer = tf.keras.optimizers.SGD(learning_rate = 1.5e-4, momentum = 0.9),
+        loss = "sparse_categorical_crossentropy",
+        metrics = ["accuracy"]
     )
-    EXTmodel.trainable = True
-
-    model = tf.keras.Sequential()
-    model.add(EXTmodel)
-    model.add(Flatten())
-    model.add(Dense(32, activation='relu',  kernel_regularizer=regularizers.l1(0.0005)))
-    model.add(Dense(64, activation='selu',  kernel_regularizer=regularizers.l2(0.0005)))
-    model.add(Dropout(0.2))
-    model.add(Dense(32, activation='relu',  kernel_regularizer=regularizers.l1(0.0005)))
-    model.add(Dense(64, activation='selu',  kernel_regularizer=regularizers.l2(0.0005)))
-    model.add(Dropout(0.2))
-    model.add(Dense(32, activation='relu',  kernel_regularizer=regularizers.l1(0.0005)))
-    model.add(Dense(64, activation='selu',  kernel_regularizer=regularizers.l2(0.0005)))
-    model.add(Dropout(0.1))
-    model.add(Dense(32, activation='relu',  kernel_regularizer=regularizers.l1(0.0005)))
-    model.add(Dense(64, activation='selu',  kernel_regularizer=regularizers.l2(0.0005)))
-    model.add(Dropout(0.1))
-    model.add(Dense(4, activation='softmax',))
 
     ES = EarlyStopping(
-        monitor="val_loss",
-        min_delta=0.01,
-        patience=10,
-        verbose=1,
-        mode="auto",
-        restore_best_weights=True,
-        start_from_epoch=0,
+        monitor = "val_loss",
+        patience = 10,
+        min_delta = 0.01,
+        restore_best_weights = True
     )
-    ModelCheckpoint(
-        filepath=pathsa,
-        monitor="val_loss",
-        save_best_only=True,
-        mode="auto",
-        verbose=1,
-        save_freq=14,
 
+    MC = ModelCheckpoint(
+        filepath = save_path,
+        monitor = "val_loss",
+        save_best_only = True,
+        verbose = 1
     )
-    optimizer = tf.keras.optimizers.SGD(learning_rate=0.00015)
-    model.compile(optimizer = optimizer, loss = 'sparse_categorical_crossentropy', metrics = ['accuracy'])
-    fitted = model.fit(train, batch_size = 32, epochs = 42,validation_data = test, callbacks = [ES, ModelCheckpoint])
 
-    model.save(pathsa)
- 
+    steps_per_epoch = train_size // 32
+
+    model.fit(train,epochs = 42 ,steps_per_epoch = train_size // 32, validation_data = test, validation_steps = (num_samples - train_size) // 32, callbacks = [ES, MC])
+
+    model.save(save_path)
+
+
 if __name__ == "__main__":
     main()

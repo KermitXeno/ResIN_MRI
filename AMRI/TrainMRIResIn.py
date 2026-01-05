@@ -148,11 +148,8 @@ def main():
 
             yield img, np.int32(label)
 
-    dataset = tf.data.Dataset.from_generator(
-    parquet_generator,
-    output_signature = (tf.TensorSpec(shape = (None, None, 3), dtype = tf.float32),tf.TensorSpec(shape = (), dtype=tf.int32),),)
-
-    dataset = dataset.shuffle(num_samples, seed=67, reshuffle_each_iteration = False)
+    dataset = tf.data.Dataset.from_generator(parquet_generator,output_signature = (tf.TensorSpec(shape = (None, None, 3), dtype = tf.float32),tf.TensorSpec(shape = (), dtype = tf.int32),),)
+    dataset = dataset.shuffle(num_samples, seed = 67, reshuffle_each_iteration = False)
 
     train_size = int(0.8 * num_samples)
     train = dataset.take(train_size)
