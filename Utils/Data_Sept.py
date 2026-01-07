@@ -12,12 +12,12 @@ MODEL_DIR = os.path.join(MRI_DIR, "Models")
 DATA_DIR  = os.path.join(MODEL_DIR, "data")
 
 PARQUET_PATH = DATA_DIR                   
-TEST_IMG_DIR = os.path.join(DATA_DIR, "Test_Data")
+TEST_IMG_DIR = os.path.join(UTILS_DIR, "Test_Data")
 
 TRAIN_OUT = os.path.join(DATA_DIR, "train.parquet")
 TEST_OUT  = os.path.join(DATA_DIR, "test.parquet")
 
-os.makedirs(TEST_IMG_DIR, exist_ok=True)
+os.makedirs(TEST_IMG_DIR, exist_ok = True)
 
 table = pq.read_table(PARQUET_PATH)
 rows = table.to_pylist()
@@ -48,7 +48,7 @@ for label, row in picked.items():
     img = decode_image(row["image"]).convert("RGB")
     img.save(os.path.join(TEST_IMG_DIR, f"class_{label}.png"))
 
-remaining = np.array(remaining, dtype=object)
+remaining = np.array(remaining, dtype = object)
 
 rng = np.random.default_rng(seed = 67)
 rng.shuffle(remaining)

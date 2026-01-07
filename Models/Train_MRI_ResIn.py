@@ -213,7 +213,7 @@ def main():
     validation_steps = (num_samples - train_size) // 32
     optimizer = tf.keras.optimizers.Adam(learning_rate = 1e-3)
     model.compile(optimizer = optimizer, loss = 'sparse_categorical_crossentropy', metrics = ['accuracy'])
-    model.fit(train, epochs = 128, steps_per_epoch = steps_per_epoch, validation_data = test, validation_steps = validation_steps, callbacks = [ES, MC],)
+    model.fit(train, epochs = 256, steps_per_epoch = steps_per_epoch, validation_data = test, validation_steps = validation_steps, callbacks = [ES, MC],)
 
     model.save(pathsave)
  

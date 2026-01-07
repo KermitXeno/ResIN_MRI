@@ -41,7 +41,7 @@ def parquet_generator(table):
         elif img.ndim == 3 and img.shape[-1] == 1:  
             img = np.repeat(img, 3, axis = -1)
 
-        img = (img - 127.5) / 127.5
+        img = tf.keras.applications.resnet_v2.preprocess_input(img)
 
         yield img, np.int32(label)
 
@@ -62,13 +62,13 @@ def resnet50v2_selu(num_classes):
     x = EXTModel.output
     x = GlobalAveragePooling2D()(x)
 
-    x = Dense(256, activation = "selu", kernel_initializer = "lecun_normal", kernel_regularizer = regularizers.l2(5e-4))(x)
-    x = AlphaDropout(0.1)(x)
+    x = Dense(256, activation = "relu", kernel_initializer = "he_normal", kernel_regularizer = regularizers.l2(5e-4))(x)
+    x = Dropout(0.1)(x)
 
-    x = Dense(128, activation = "selu", kernel_initializer = "lecun_normal", kernel_regularizer = regularizers.l2(5e-4))(x)
-    x = AlphaDropout(0.1)(x)
+    x = Dense(128, activation = "relu", kernel_initializer = "he_normal", kernel_regularizer = regularizers.l2(5e-4))(x)
+    x = Dropout(0.1)(x)
 
-    outputs = Dense(num_classes, activation = "softmax", kernel_initializer = "lecun_normal" )(x)
+    outputs = Dense(num_classes, activation = "softmax", kernel_initializer="glorot_uniform" )(x)
 
     return Model(EXTModel.input, outputs)
 
@@ -81,9 +81,7 @@ def main():
 
     num_samples = table.num_rows
 
-    gen = parquet_generator(table)
-
-    dataset = tf.data.Dataset.from_generator(gen,output_signature = (tf.TensorSpec(shape=(None, None, 3), dtype = tf.float32),tf.TensorSpec(shape = (), dtype = tf.int32),),)
+    dataset = tf.data.Dataset.from_generator(lambda: parquet_generator(table), output_signature = (tf.TensorSpec(shape = (None, None, 3), dtype = tf.float32), tf.TensorSpec(shape = (), dtype = tf.int32),),)
     dataset = dataset.shuffle(num_samples, seed = 67, reshuffle_each_iteration = False)
 
     train_size = int(0.8 * num_samples)
@@ -100,8 +98,10 @@ def main():
 
     model = resnet50v2_selu(num_classes)
 
+    loss = tf.keras.losses.SparseCategoricalCrossentropy()
+
     model.compile(optimizer = tf.keras.optimizers.SGD(learning_rate = 1.5e-4, momentum = 0.9),
-        loss = "sparse_categorical_crossentropy",
+        loss = loss,
         metrics = ["accuracy"]
     )
 
@@ -121,7 +121,8 @@ def main():
 
     steps_per_epoch = train_size // 32
 
-    model.fit(train,epochs = 42 ,steps_per_epoch = train_size // 32, validation_data = test, validation_steps = (num_samples - train_size) // 32, callbacks = [ES, MC])
+    #REMINDER, DO NOT REMOVE STEPS PER EPOCH OR IT WILL NOT STOP TRAINING!!!
+    model.fit(train,epochs = 64 ,steps_per_epoch = train_size // 32, validation_data = test, validation_steps = (num_samples - train_size) // 32, callbacks = [ES, MC])
 
     model.save(save_path)
 
