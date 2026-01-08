@@ -14,10 +14,9 @@
 """
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras.models import Model, Sequential 
+from tensorflow.keras.models import Model
 from tensorflow.keras.layers import *
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
-from tensorflow.keras import regularizers
 import pyarrow.parquet as pq
 import numpy as np
 from PIL import Image
@@ -63,11 +62,13 @@ class BottleneckSELU(tf.keras.layers.Layer):
         return shortcut + 0.1 * y
 
 class SELUInception(tf.keras.layers.Layer):
-    def __init__(self, out_channels):
+    def __init__(self, out_channels, residual_scale=0.1):
         super().__init__()
         self.out_channels = out_channels
         assert out_channels % 4 == 0, "out_channels must be divisible by 4"
 
+        self.out_channels = out_channels
+        self.residual_scale = residual_scale
         branch_channels = out_channels // 4
 
         self.b1 = Conv2D(branch_channels, 1, activation = "selu", kernel_initializer = "lecun_normal", padding = "same")
@@ -108,7 +109,7 @@ class SELUInception(tf.keras.layers.Layer):
         if self.residual is not None:
             x = self.residual(x)
 
-        return out + 0.1 * out 
+        return x + self.residual_scale * out
 
 def main():
 
@@ -125,7 +126,7 @@ def main():
 
             if isinstance(img, dict):
                 if "bytes" in img:
-                    img = Image.open(io.BytesIO(img["bytes"]))
+                    img = Image.open(io.BytesIO(img["bytes"])).convert("RGB")
                 elif "data" in img and "shape" in img:
                     arr = np.array(img["data"], dtype = np.uint8)
                     arr = arr.reshape(img["shape"])
@@ -149,7 +150,7 @@ def main():
             yield img, np.int32(label)
 
     dataset = tf.data.Dataset.from_generator(parquet_generator,output_signature = (tf.TensorSpec(shape = (None, None, 3), dtype = tf.float32),tf.TensorSpec(shape = (), dtype = tf.int32),),)
-    dataset = dataset.shuffle(num_samples, seed = 67, reshuffle_each_iteration = False)
+    dataset = dataset.shuffle(num_samples, seed = 67, reshuffle_each_iteration = True)
 
     train_size = int(0.8 * num_samples)
     train = dataset.take(train_size)
@@ -191,15 +192,15 @@ def main():
     labels = table.column("label").to_numpy()
     num_classes = int(labels.max() + 1)
     model = build_model(num_classes)
+    loss = tf.keras.losses.SparseCategoricalCrossentropy()
 
     ES = EarlyStopping(
         monitor = "val_loss",
-        min_delta = 0.01,
+        min_delta = 0.001,
         patience = 16,
         verbose = 1,
         mode = "auto",
         restore_best_weights = True,
-        start_from_epoch = 0,
     )
     MC = ModelCheckpoint(
         filepath = pathsave,
@@ -209,13 +210,15 @@ def main():
         save_freq = "epoch",
 
     )
+
     steps_per_epoch = train_size // 32
     validation_steps = (num_samples - train_size) // 32
-    optimizer = tf.keras.optimizers.Adam(learning_rate = 1e-3)
-    model.compile(optimizer = optimizer, loss = 'sparse_categorical_crossentropy', metrics = ['accuracy'])
+    validation_steps = max(1, validation_steps)
+
+    optimizer = tf.keras.optimizers.Adam(learning_rate=1e-3, epsilon=1e-8)
+
+    model.compile(optimizer = optimizer, loss = loss, metrics = ['accuracy'])
     model.fit(train, epochs = 256, steps_per_epoch = steps_per_epoch, validation_data = test, validation_steps = validation_steps, callbacks = [ES, MC],)
 
-    model.save(pathsave)
- 
 if __name__ == "__main__":
     main()

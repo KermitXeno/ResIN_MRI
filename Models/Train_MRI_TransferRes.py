@@ -108,7 +108,7 @@ def main():
     ES = EarlyStopping(
         monitor = "val_loss",
         patience = 10,
-        min_delta = 0.01,
+        min_delta = 0.001,
         restore_best_weights = True
     )
 
@@ -123,9 +123,6 @@ def main():
 
     #REMINDER, DO NOT REMOVE STEPS PER EPOCH OR IT WILL NOT STOP TRAINING!!!
     model.fit(train,epochs = 64 ,steps_per_epoch = train_size // 32, validation_data = test, validation_steps = (num_samples - train_size) // 32, callbacks = [ES, MC])
-
-    model.save(save_path)
-
 
 if __name__ == "__main__":
     main()
