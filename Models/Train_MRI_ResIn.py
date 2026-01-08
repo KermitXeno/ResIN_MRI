@@ -26,24 +26,19 @@ import io
 base_dir = os.path.dirname(os.path.abspath(__file__))
 
 class BottleneckSELU(tf.keras.layers.Layer):
-    def __init__(self, out_channels, stride=1, residual_scale=0.1, dropout_rate=0.05):
+    def __init__(self, out_channels, stride=1, dropout_rate=0.05):
         super().__init__()
         self.out_channels = out_channels
         self.stride = stride
-        self.residual_scale = residual_scale
 
-        self.act1 = Activation("selu")
         self.conv1 = Conv2D(out_channels, 1, kernel_initializer = "lecun_normal")
+        self.act1 = Activation("selu")
 
+        self.conv2 = Conv2D(out_channels, 3, strides = stride, padding = "same", kernel_initializer = "lecun_normal")
         self.act2 = Activation("selu")
-        self.conv2 = Conv2D(out_channels, 3, strides = stride,
-                            padding = "same", kernel_initializer = "lecun_normal")
 
-        self.act3 = Activation("selu")
         self.conv3 = Conv2D(out_channels, 1, kernel_initializer = "lecun_normal")
-
         self.dropout = AlphaDropout(dropout_rate)
-        self.shortcut = None
 
         self.shortcut = None
 
@@ -56,22 +51,18 @@ class BottleneckSELU(tf.keras.layers.Layer):
         y = self.conv1(y)
         y = self.act2(y)
         y = self.conv2(y)
-        y = self.act3(y)
         y = self.conv3(y)
-        y = self.dropout(y, training=training)
+        y = self.dropout(y)
 
         shortcut = x if self.shortcut is None else self.shortcut(x)
 
-        return shortcut + self.residual_scale * y
+        return shortcut + y
 
 class SELUInception(tf.keras.layers.Layer):
-    def __init__(self, out_channels, residual_scale=0.1, dropout_rate=0.05):
+    def __init__(self, out_channels, dropout_rate=0.05):
         super().__init__()
         self.out_channels = out_channels
         assert out_channels % 4 == 0, "out_channels must be divisible by 4"
-
-        self.out_channels = out_channels
-        self.residual_scale = residual_scale
         branch_channels = out_channels // 4
 
         self.b1 = Sequential([
@@ -81,7 +72,7 @@ class SELUInception(tf.keras.layers.Layer):
 
         self.b2 = Sequential([
             Conv2D(branch_channels, 1, activation = "selu", kernel_initializer = "lecun_normal", padding = "same"),
-            DepthwiseConv2D(3, padding = "same", depthwise_initializer = "lecun_normal"),
+            Conv2D(branch_channels, 3, padding="same", groups=branch_channels, kernel_initializer="lecun_normal", use_bias=True),
             Activation("selu"),
             Conv2D(branch_channels, 1, activation = "selu", kernel_initializer = "lecun_normal", padding = "same"),
             AlphaDropout(dropout_rate)
@@ -89,7 +80,7 @@ class SELUInception(tf.keras.layers.Layer):
 
         self.b3 = Sequential([
             Conv2D(branch_channels, 1, activation = "selu", kernel_initializer = "lecun_normal", padding = "same"),
-            DepthwiseConv2D(5, padding="same", depthwise_initializer = "lecun_normal"),
+            Conv2D(branch_channels, 5, padding="same", groups=branch_channels, kernel_initializer="lecun_normal", use_bias=True),
             Activation("selu"),
             Conv2D(branch_channels, 1, activation = "selu", kernel_initializer = "lecun_normal", padding = "same"),
             AlphaDropout(dropout_rate)
@@ -118,7 +109,7 @@ class SELUInception(tf.keras.layers.Layer):
 
         shortcut = x if self.residual is None else self.residual(x)
 
-        return shortcut + self.residual_scale * out
+        return shortcut + out
 
 def main():
 
@@ -154,22 +145,24 @@ def main():
             elif img.ndim == 3 and img.shape[-1] == 1:  
                 img = np.repeat(img, 3, axis = -1)
 
-            img = (img - 127.5) / 127.5
+            img = (img - img.mean()) / (img.std() + 1e-6)
 
             yield img, np.int32(label)
 
-    dataset = tf.data.Dataset.from_generator(parquet_generator,output_signature = (tf.TensorSpec(shape = (None, None, 3), dtype = tf.float32),tf.TensorSpec(shape = (), dtype = tf.int32),),)
-    dataset = dataset.shuffle(num_samples, seed = 67, reshuffle_each_iteration = True)
+    dataset = tf.data.Dataset.from_generator(parquet_generator, output_signature = (tf.TensorSpec(shape = (None, None, 3), dtype = tf.float32), tf.TensorSpec(shape = (), dtype = tf.int32),),)
+
+    dataset = dataset.shuffle(num_samples, seed = 67, reshuffle_each_iteration = False) 
 
     train_size = int(0.8 * num_samples)
-    train = dataset.take(train_size)
-    test  = dataset.skip(train_size)
+
+    train = dataset.take(train_size)    
+    test  = dataset.skip(train_size)  
 
     def preprocess(x, y):
         x = tf.image.resize(x, (128, 128))
         return x, y
 
-    train = (train.map(preprocess, num_parallel_calls = tf.data.AUTOTUNE).batch(32).repeat().prefetch(tf.data.AUTOTUNE))
+    train = (train.map(preprocess, num_parallel_calls = tf.data.AUTOTUNE).shuffle(1024).batch(32).prefetch(tf.data.AUTOTUNE))
     test = (test.map(preprocess, num_parallel_calls = tf.data.AUTOTUNE).batch(32).prefetch(tf.data.AUTOTUNE))
 
     #model arch
@@ -220,14 +213,10 @@ def main():
 
     )
 
-    steps_per_epoch = train_size // 32
-    validation_steps = (num_samples - train_size) // 32
-    validation_steps = max(1, validation_steps)
-
     optimizer = tf.keras.optimizers.Adam(learning_rate=1e-3, epsilon=1e-8)
 
     model.compile(optimizer = optimizer, loss = loss, metrics = ['accuracy'])
-    model.fit(train, epochs = 256, steps_per_epoch = steps_per_epoch, validation_data = test, validation_steps = validation_steps, callbacks = [ES, MC],)
+    model.fit(train, epochs = 256, validation_data = test, callbacks = [ES, MC],)
 
 if __name__ == "__main__":
     main()
