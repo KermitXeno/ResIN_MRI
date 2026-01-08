@@ -26,10 +26,11 @@ import io
 base_dir = os.path.dirname(os.path.abspath(__file__))
 
 class BottleneckSELU(tf.keras.layers.Layer):
-    def __init__(self, out_channels, stride = 1):
+    def __init__(self, out_channels, stride=1, residual_scale=0.1, dropout_rate=0.05):
         super().__init__()
         self.out_channels = out_channels
         self.stride = stride
+        self.residual_scale = residual_scale
 
         self.act1 = Activation("selu")
         self.conv1 = Conv2D(out_channels, 1, kernel_initializer = "lecun_normal")
@@ -41,14 +42,14 @@ class BottleneckSELU(tf.keras.layers.Layer):
         self.act3 = Activation("selu")
         self.conv3 = Conv2D(out_channels, 1, kernel_initializer = "lecun_normal")
 
+        self.dropout = AlphaDropout(dropout_rate)
+        self.shortcut = None
+
         self.shortcut = None
 
     def build(self, input_shape):
         if self.stride != 1 or input_shape[-1] != self.out_channels:
-            self.shortcut = Conv2D(
-                self.out_channels, 1, strides = self.stride,
-                padding = "same", kernel_initializer = "lecun_normal"
-            )
+            self.shortcut = Conv2D(self.out_channels, 1, strides = self.stride, padding = "same", kernel_initializer = "lecun_normal",use_bias = True)
 
     def call(self, x):
         y = self.act1(x)
@@ -57,12 +58,14 @@ class BottleneckSELU(tf.keras.layers.Layer):
         y = self.conv2(y)
         y = self.act3(y)
         y = self.conv3(y)
+        y = self.dropout(y, training=training)
 
         shortcut = x if self.shortcut is None else self.shortcut(x)
-        return shortcut + 0.1 * y
+
+        return shortcut + self.residual_scale * y
 
 class SELUInception(tf.keras.layers.Layer):
-    def __init__(self, out_channels, residual_scale=0.1):
+    def __init__(self, out_channels, residual_scale=0.1, dropout_rate=0.05):
         super().__init__()
         self.out_channels = out_channels
         assert out_channels % 4 == 0, "out_channels must be divisible by 4"
@@ -71,31 +74,38 @@ class SELUInception(tf.keras.layers.Layer):
         self.residual_scale = residual_scale
         branch_channels = out_channels // 4
 
-        self.b1 = Conv2D(branch_channels, 1, activation = "selu", kernel_initializer = "lecun_normal", padding = "same")
+        self.b1 = Sequential([
+            Conv2D(branch_channels, 1, activation = "selu", kernel_initializer = "lecun_normal", padding = "same"),
+            AlphaDropout(dropout_rate)
+        ])
 
         self.b2 = Sequential([
             Conv2D(branch_channels, 1, activation = "selu", kernel_initializer = "lecun_normal", padding = "same"),
             DepthwiseConv2D(3, padding = "same", depthwise_initializer = "lecun_normal"),
-            Conv2D(branch_channels, 1, activation = "selu", kernel_initializer = "lecun_normal", padding = "same")
+            Activation("selu"),
+            Conv2D(branch_channels, 1, activation = "selu", kernel_initializer = "lecun_normal", padding = "same"),
+            AlphaDropout(dropout_rate)
         ])
 
         self.b3 = Sequential([
             Conv2D(branch_channels, 1, activation = "selu", kernel_initializer = "lecun_normal", padding = "same"),
             DepthwiseConv2D(5, padding="same", depthwise_initializer = "lecun_normal"),
-            Conv2D(branch_channels, 1, activation = "selu", kernel_initializer = "lecun_normal", padding = "same")
+            Activation("selu"),
+            Conv2D(branch_channels, 1, activation = "selu", kernel_initializer = "lecun_normal", padding = "same"),
+            AlphaDropout(dropout_rate)
         ])
 
         self.b4 = Sequential([
             AveragePooling2D(pool_size = 3, strides = 1, padding = "same"),
-            Conv2D(branch_channels, 1, activation = "selu", kernel_initializer = "lecun_normal", padding = "same")
+            Conv2D(branch_channels, 1, activation = "selu", kernel_initializer = "lecun_normal", padding = "same"),
+            AlphaDropout(dropout_rate)
         ])
 
         self.residual = None
 
     def build(self, input_shape):
-        in_channels = input_shape[-1]
-        if in_channels != self.out_channels:
-            self.residual = Conv2D(self.out_channels, 1, padding = "same", kernel_initializer = "lecun_normal")
+        if input_shape[-1] != self.out_channels:
+            self.residual = Conv2D(self.out_channels, 1, padding = "same", kernel_initializer = "lecun_normal",  use_bias=True)
 
     def call(self, x):
 
@@ -106,10 +116,9 @@ class SELUInception(tf.keras.layers.Layer):
 
         out = tf.concat([y1, y2, y3, y4], axis = -1)
 
-        if self.residual is not None:
-            x = self.residual(x)
+        shortcut = x if self.residual is None else self.residual(x)
 
-        return x + self.residual_scale * out
+        return shortcut + self.residual_scale * out
 
 def main():
 
