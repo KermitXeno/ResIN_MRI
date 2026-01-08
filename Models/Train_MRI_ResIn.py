@@ -23,28 +23,26 @@ from PIL import Image
 import os
 import io
 
-base_dir = os.path.dirname(os.path.abspath(__file__))
-
 class BottleneckSELU(tf.keras.layers.Layer):
     def __init__(self, out_channels, stride=1, dropout_rate=0.05):
         super().__init__()
         self.out_channels = out_channels
         self.stride = stride
 
-        self.conv1 = Conv2D(out_channels, 1, kernel_initializer = "lecun_normal")
+        self.conv1 = Conv2D(out_channels, 1, kernel_initializer = "lecun_normal", use_bias=True)
         self.act1 = Activation("selu")
 
-        self.conv2 = Conv2D(out_channels, 3, strides = stride, padding = "same", kernel_initializer = "lecun_normal")
+        self.conv2 = Conv2D(out_channels, 3, strides = stride, padding = "same", kernel_initializer = "lecun_normal", use_bias=True)
         self.act2 = Activation("selu")
 
-        self.conv3 = Conv2D(out_channels, 1, kernel_initializer = "lecun_normal")
+        self.conv3 = Conv2D(out_channels, 1, kernel_initializer = "lecun_normal", use_bias=True)
         self.dropout = AlphaDropout(dropout_rate)
 
         self.shortcut = None
 
     def build(self, input_shape):
         if self.stride != 1 or input_shape[-1] != self.out_channels:
-            self.shortcut = Conv2D(self.out_channels, 1, strides = self.stride, padding = "same", kernel_initializer = "lecun_normal",use_bias = True)
+            self.shortcut = Conv2D(self.out_channels, 1, strides = self.stride, padding = "same", kernel_initializer = "lecun_normal", use_bias = True)
 
     def call(self, x):
         y = self.act1(x)
@@ -52,11 +50,12 @@ class BottleneckSELU(tf.keras.layers.Layer):
         y = self.act2(y)
         y = self.conv2(y)
         y = self.conv3(y)
-        y = self.dropout(y)
+        y = Activation("selu")(y)
 
         shortcut = x if self.shortcut is None else self.shortcut(x)
 
-        return shortcut + y
+        #RESIDUAL SCALING HELL FACTOR - in theory .5 is the best for a bottleneck
+        return (shortcut + y) * tf.math.sqrt(0.5)
 
 class SELUInception(tf.keras.layers.Layer):
     def __init__(self, out_channels, dropout_rate=0.05):
@@ -66,31 +65,33 @@ class SELUInception(tf.keras.layers.Layer):
         branch_channels = out_channels // 4
 
         self.b1 = Sequential([
-            Conv2D(branch_channels, 1, activation = "selu", kernel_initializer = "lecun_normal", padding = "same"),
+            Conv2D(branch_channels, 1, activation = "selu", kernel_initializer = "lecun_normal", padding = "same", use_bias=True),
             AlphaDropout(dropout_rate)
         ])
 
         self.b2 = Sequential([
-            Conv2D(branch_channels, 1, activation = "selu", kernel_initializer = "lecun_normal", padding = "same"),
-            Conv2D(branch_channels, 3, padding="same", groups=branch_channels, kernel_initializer="lecun_normal", use_bias=True),
+            Conv2D(branch_channels, 1, activation = "selu", kernel_initializer = "lecun_normal", padding = "same", use_bias=True),
+            DepthwiseConv2D(3, padding="same", depthwise_initializer="lecun_normal", use_bias=False),
             Activation("selu"),
-            Conv2D(branch_channels, 1, activation = "selu", kernel_initializer = "lecun_normal", padding = "same"),
+            Conv2D(branch_channels, 1, activation = "selu", kernel_initializer = "lecun_normal", padding = "same", use_bias=True),
             AlphaDropout(dropout_rate)
         ])
 
         self.b3 = Sequential([
-            Conv2D(branch_channels, 1, activation = "selu", kernel_initializer = "lecun_normal", padding = "same"),
-            Conv2D(branch_channels, 5, padding="same", groups=branch_channels, kernel_initializer="lecun_normal", use_bias=True),
+            Conv2D(branch_channels, 1, activation = "selu", kernel_initializer = "lecun_normal", padding = "same", use_bias=True),
+            DepthwiseConv2D(5, padding="same", depthwise_initializer="lecun_normal", use_bias=False),
             Activation("selu"),
-            Conv2D(branch_channels, 1, activation = "selu", kernel_initializer = "lecun_normal", padding = "same"),
+            Conv2D(branch_channels, 1, activation = "selu", kernel_initializer = "lecun_normal", padding = "same", use_bias=True),
             AlphaDropout(dropout_rate)
         ])
 
         self.b4 = Sequential([
             AveragePooling2D(pool_size = 3, strides = 1, padding = "same"),
-            Conv2D(branch_channels, 1, activation = "selu", kernel_initializer = "lecun_normal", padding = "same"),
+            Conv2D(branch_channels, 1, activation = "selu", kernel_initializer = "lecun_normal", padding = "same", use_bias=True),
             AlphaDropout(dropout_rate)
         ])
+
+        self.residual_dropout = AlphaDropout(dropout_rate)
 
         self.residual = None
 
@@ -109,10 +110,19 @@ class SELUInception(tf.keras.layers.Layer):
 
         shortcut = x if self.residual is None else self.residual(x)
 
-        return shortcut + out
+        #NEEDED TO STABILIZE TRAINING
+        out = shortcut + out
+        out = self.residual_dropout(out)
+
+        #RESIDUAL SCALING HELL FACTOR -(1 / num_branches) if concatenated branches are added to the shortcut
+        #THERE ARE 4 BRANCHES CURRENTLY IF I ADD MORE THEN CHANGE THIS VALUE FUTURE ME OR SO HELP ME GOD
+        branches = 4
+        scale = tf.math.sqrt(1 / (1 + branches))
+        return out * scale
 
 def main():
 
+    base_dir = os.path.dirname(os.path.abspath(__file__))
     dataloc = os.path.join(base_dir, 'data')
     table = pq.read_table(dataloc)
     pathsave = os.path.join(base_dir, 'weights', 'AMRI.keras')
@@ -145,13 +155,14 @@ def main():
             elif img.ndim == 3 and img.shape[-1] == 1:  
                 img = np.repeat(img, 3, axis = -1)
 
-            img = (img - img.mean()) / (img.std() + 1e-6)
+            #NORMALIZE IMAGE FUNC, VERY IMPORTANT 0 - 1
+            img = img / 255.0
 
             yield img, np.int32(label)
 
     dataset = tf.data.Dataset.from_generator(parquet_generator, output_signature = (tf.TensorSpec(shape = (None, None, 3), dtype = tf.float32), tf.TensorSpec(shape = (), dtype = tf.int32),),)
 
-    dataset = dataset.shuffle(num_samples, seed = 67, reshuffle_each_iteration = False) 
+    dataset = dataset.shuffle(num_samples, seed = 67, reshuffle_each_iteration = True) 
 
     train_size = int(0.8 * num_samples)
 
@@ -162,7 +173,7 @@ def main():
         x = tf.image.resize(x, (128, 128))
         return x, y
 
-    train = (train.map(preprocess, num_parallel_calls = tf.data.AUTOTUNE).shuffle(1024).batch(32).prefetch(tf.data.AUTOTUNE))
+    train = (train.map(preprocess, num_parallel_calls = tf.data.AUTOTUNE).batch(32).prefetch(tf.data.AUTOTUNE))
     test = (test.map(preprocess, num_parallel_calls = tf.data.AUTOTUNE).batch(32).prefetch(tf.data.AUTOTUNE))
 
     #model arch
@@ -183,7 +194,7 @@ def main():
         x = BottleneckSELU(256, stride=2)(x)
         x = SELUInception(256)(x)
 
-        x = AlphaDropout(0.15)(x)
+        x = AlphaDropout(0.1)(x)
 
         x = GlobalAveragePooling2D()(x)
 
@@ -192,7 +203,7 @@ def main():
         return Model(inputs, outputs)
 
     labels = table.column("label").to_numpy()
-    num_classes = int(labels.max() + 1)
+    num_classes = len(np.unique(labels))
     model = build_model(num_classes)
     loss = tf.keras.losses.SparseCategoricalCrossentropy()
 
@@ -213,7 +224,7 @@ def main():
 
     )
 
-    optimizer = tf.keras.optimizers.Adam(learning_rate=1e-3, epsilon=1e-8)
+    optimizer = tf.keras.optimizers.Adam(learning_rate=1e-5, epsilon=1e-8)
 
     model.compile(optimizer = optimizer, loss = loss, metrics = ['accuracy'])
     model.fit(train, epochs = 256, validation_data = test, callbacks = [ES, MC],)
