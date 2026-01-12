@@ -1,3 +1,4 @@
 .vs/
 /AMRI/weights/AMRI_resnet50v2.keras
 /Models/weights/AMRI_resnet50v2.keras
+/Models/weights/AMRI.keras

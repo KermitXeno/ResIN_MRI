@@ -49,7 +49,7 @@ def preprocess(x, y):
     x = tf.image.resize(x, (128, 128))
     return x, y
 
-def resnet50v2_selu(num_classes):
+def resnet50v2(num_classes):
 
     EXTModel = ResNet50V2(
         include_top = False,
@@ -73,11 +73,10 @@ def resnet50v2_selu(num_classes):
     return Model(EXTModel.input, outputs)
 
 def main():
-
     base_dir = os.path.dirname(os.path.abspath(__file__))
-
     dataloc = os.path.join(base_dir, 'data')
     table = pq.read_table(dataloc)
+    pathsave = os.path.join(base_dir, "weights", "AMRI_resnet50v2.keras")
 
     num_samples = table.num_rows
 
@@ -91,12 +90,10 @@ def main():
     train = (train.map(preprocess, num_parallel_calls = tf.data.AUTOTUNE).batch(32).repeat().prefetch(tf.data.AUTOTUNE))
     test = (test.map(preprocess, num_parallel_calls = tf.data.AUTOTUNE).batch(32).prefetch(tf.data.AUTOTUNE))
 
-    save_path = os.path.join(base_dir, "weights", "AMRI_resnet50v2.keras")
-
     labels = pq.read_table(dataloc).column("label").to_numpy()
     num_classes = int(labels.max() + 1)
 
-    model = resnet50v2_selu(num_classes)
+    model = resnet50v2(num_classes)
 
     loss = tf.keras.losses.SparseCategoricalCrossentropy()
 
@@ -108,12 +105,12 @@ def main():
     ES = EarlyStopping(
         monitor = "val_loss",
         patience = 10,
-        min_delta = 0.001,
+        min_delta = 0.0001,
         restore_best_weights = True
     )
 
     MC = ModelCheckpoint(
-        filepath = save_path,
+        filepath = pathsave,
         monitor = "val_loss",
         save_best_only = True,
         verbose = 1
