@@ -2,3 +2,5 @@
 /AMRI/weights/AMRI_resnet50v2.keras
 /Models/weights/AMRI_resnet50v2.keras
 /Models/weights/AMRI.keras
+/Models/weights/sekuresinc.keras
+/Models/weights/MRIRELUresin.keras

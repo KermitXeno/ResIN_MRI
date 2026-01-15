@@ -158,7 +158,7 @@ def main():
     base_dir = os.path.dirname(os.path.abspath(__file__))
     dataloc = os.path.join(base_dir, 'data')
     table = pq.read_table(dataloc)
-    pathsave = os.path.join(base_dir, "weights", "sekuresinc.keras")
+    pathsave = os.path.join(base_dir, "weights", "MRISELUresin.keras")
 
     num_samples = table.num_rows
 
@@ -172,7 +172,7 @@ def main():
     train = (train.map(preprocess, num_parallel_calls = tf.data.AUTOTUNE).batch(32).prefetch(tf.data.AUTOTUNE))
     test = (test.map(preprocess, num_parallel_calls = tf.data.AUTOTUNE).batch(32).prefetch(tf.data.AUTOTUNE))
 
-    labels = pq.read_table(dataloc).column("label").to_numpy()
+    labels = table.column("label").to_numpy()
     num_classes = int(labels.max() + 1)
 
     #model arch
