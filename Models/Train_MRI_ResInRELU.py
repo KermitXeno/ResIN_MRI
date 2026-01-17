@@ -63,9 +63,9 @@ class DropBlock2D(tf.keras.layers.Layer):
             valid_w = tf.maximum(w - self.block_size + 1, 1)
 
             gamma = (
-                (1.0 - self.keep_prob)
-                * tf.cast(h * w, tf.float32)
-                / tf.cast(self.block_size ** 2 * valid_h * valid_w, tf.float32)
+                (1.0 - self.keep_prob) * tf.cast(h * w, tf.float32)
+                / 
+                tf.cast(self.block_size ** 2 * valid_h * valid_w, tf.float32)
             )
 
             # Sample mask
@@ -86,14 +86,14 @@ class DropBlock2D(tf.keras.layers.Layer):
 
             return x * keep
 
-        return tf.cond(tf.logical_or(h < self.block_size, w < self.block_size), no_drop,apply_dropblock,)
+        return tf.cond(tf.logical_or(h < self.block_size, w < self.block_size), no_drop, apply_dropblock,)
 
 class ResRELU(tf.keras.layers.Layer):
-    def __init__(self, out_channels, stride = 1, reduction = 16, survival_prob = 1.0, dropblock_keep_prob = 1.0, block_size = 7, **kwargs):
+    def __init__(self, channels, stride = 1, reduction = 16, survival_prob = 1.0, dropblock_keep_prob = 1.0, block_size = 7, **kwargs):
         super().__init__(**kwargs)
-        self.out_channels = out_channels
+        self.out_channels = channels
         self.stride = stride
-        self.mid_channels = out_channels // 4
+        self.mid_channels = channels // 4
 
         # Pre-activation
         self.bn1 = BatchNormalization()
