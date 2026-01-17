@@ -31,12 +31,12 @@ class StochasticDepth(tf.keras.layers.Layer):
         self.survival_prob = survival_prob
 
     def call(self, x, training=None):
-        if training is False:
+        if not training or self.survival_prob == 1.0:
             return x
         batch_size = tf.shape(x)[0]
         random_tensor = self.survival_prob + tf.random.uniform([batch_size, 1, 1, 1])
         binary_tensor = tf.floor(random_tensor)
-        return tf.divide(x, self.survival_prob) * binary_tensor
+        return (x / self.survival_prob) * binary_tensor
 
 class DropBlock2D(tf.keras.layers.Layer):
     def __init__(self, block_size, keep_prob, **kwargs):
@@ -45,19 +45,48 @@ class DropBlock2D(tf.keras.layers.Layer):
         self.keep_prob = keep_prob
 
     def call(self, x, training=None):
-        if not training:
+        if not training or self.keep_prob == 1.0:
             return x
 
-        gamma = ((1. - self.keep_prob) / (self.block_size ** 2)) * (tf.cast(tf.shape(x)[1] * tf.shape(x)[2], tf.float32) / tf.cast((tf.shape(x)[1] - self.block_size + 1) * (tf.shape(x)[2] - self.block_size + 1), tf.float32))
+    # Spatial dimensions
+        h = tf.shape(x)[1]
+        w = tf.shape(x)[2]
+        c = tf.shape(x)[3]
 
-        mask = tf.cast(tf.random.uniform(tf.shape(x)[:3]) < gamma, tf.float32)
-        mask = tf.expand_dims(mask, -1)
-        mask = -tf.nn.max_pool2d(-mask, ksize = self.block_size, strides = 1, padding = 'SAME')
+    # If feature map is smaller than block_size, skip DropBlock
+        def no_drop():
+            return x
 
-        keep = 1.0 - mask
-        norm = tf.cast(tf.size(keep), tf.float32) / tf.reduce_sum(keep)
+        def apply_dropblock():
+            # Compute valid region sizes
+            valid_h = tf.maximum(h - self.block_size + 1, 1)
+            valid_w = tf.maximum(w - self.block_size + 1, 1)
 
-        return x * keep * norm
+            gamma = (
+                (1.0 - self.keep_prob)
+                * tf.cast(h * w, tf.float32)
+                / tf.cast(self.block_size ** 2 * valid_h * valid_w, tf.float32)
+            )
+
+            # Sample mask
+            mask = tf.cast(tf.random.uniform([tf.shape(x)[0], h, w, c]) < gamma,tf.float32,)
+
+            # Create blocks
+            mask = -tf.nn.max_pool2d(-mask, ksize = self.block_size, strides = 1, padding = "VALID",)
+
+            pad_h = h - tf.shape(mask)[1]
+            pad_w = w - tf.shape(mask)[2]
+            mask = tf.pad(mask, [[0, 0], [0, pad_h], [0, pad_w], [0, 0]])
+
+            keep = 1.0 - mask
+
+            # Normalize activations
+            keep_mean = tf.reduce_mean(keep, axis=[1, 2, 3], keepdims=True)
+            keep = keep / tf.maximum(keep_mean, 1e-6)
+
+            return x * keep
+
+        return tf.cond(tf.logical_or(h < self.block_size, w < self.block_size), no_drop,apply_dropblock,)
 
 class ResRELU(tf.keras.layers.Layer):
     def __init__(self, out_channels, stride = 1, reduction = 16, survival_prob = 1.0, dropblock_keep_prob = 1.0, block_size = 7, **kwargs):
@@ -83,7 +112,8 @@ class ResRELU(tf.keras.layers.Layer):
 
         # Squeeze-and-Excitation
         self.global_pool = GlobalAveragePooling2D()
-        self.se_reduce = Dense(self.mid_channels // reduction, activation = 'relu')
+        se_width = max(1, self.mid_channels // reduction)
+        self.se_reduce = Dense(se_width, activation='relu')
         self.se_expand = Dense(self.out_channels, activation = 'sigmoid')
 
         # Regularizers
@@ -96,6 +126,7 @@ class ResRELU(tf.keras.layers.Layer):
     def build(self, input_shape):
         if self.stride != 1 or input_shape[-1] != self.out_channels:
             self.shortcut_conv = Conv2D(self.out_channels, 1, strides = self.stride, padding = 'same', use_bias = False, kernel_initializer = 'he_normal')
+            self.shortcut_bn = BatchNormalization()
         super().build(input_shape)
 
     def call(self, x, training = None):
@@ -104,9 +135,10 @@ class ResRELU(tf.keras.layers.Layer):
         y = self.relu1(y)
 
         # Shortcut path
-        shortcut = x
         if self.shortcut_conv:
-            shortcut = self.shortcut_conv(y)
+                shortcut = self.shortcut_bn(self.shortcut_conv(x), training=training)
+        else:
+            shortcut = x
 
         # Bottleneck conv path
         y = self.conv1(y)
@@ -126,11 +158,11 @@ class ResRELU(tf.keras.layers.Layer):
         se = Reshape((1, 1, self.out_channels))(se)
         y = Multiply()([y, se])
 
-        # DropBlock
-        y = self.dropblock(y, training = training)
-
         # Stochastic Depth
         y = self.stoch_depth(y, training = training)
+
+        # DropBlock
+        y = self.dropblock(y, training = training)
 
         # Final merge
         return shortcut + y
@@ -183,8 +215,8 @@ class RELUInception(tf.keras.layers.Layer):
         y = (b1 + b3 + b5 + bp) * self.inv_sqrt4
 
         # Gating
-        g = self.relu(self.gate_bn(self.gate(x), training = training))
-        g = tf.exp(self.gate_scale * g)
+        g = self.gate_bn(self.gate(x), training=training)
+        g = tf.sigmoid(self.gate_scale * g)
 
         y = y * g
 
@@ -218,8 +250,6 @@ def parquet_generator(table):
         elif img.ndim == 3 and img.shape[-1] == 1:
             img = np.repeat(img, 3, axis = -1)
 
-        img = img / 255.0
-
         yield img, np.int32(label)
 
 def preprocess(x, y):
@@ -236,17 +266,16 @@ def main():
     num_samples = table.num_rows
 
     dataset = tf.data.Dataset.from_generator(lambda: parquet_generator(table), output_signature = (tf.TensorSpec(shape = (None, None, 3), dtype = tf.float32), tf.TensorSpec(shape = (), dtype = tf.int32),),)
-    dataset = dataset.shuffle(num_samples, seed = 67, reshuffle_each_iteration = False)
+    dataset = dataset.shuffle(num_samples, seed = 67, reshuffle_each_iteration = True)
 
     train_size = int(0.8 * num_samples)
     train = dataset.take(train_size)
     test  = dataset.skip(train_size)
 
-    train = (train.map(preprocess, num_parallel_calls = tf.data.AUTOTUNE).batch(32).prefetch(tf.data.AUTOTUNE))
+    train = (train.map(preprocess, num_parallel_calls = tf.data.AUTOTUNE).batch(32).repeat().prefetch(tf.data.AUTOTUNE))
     test = (test.map(preprocess, num_parallel_calls = tf.data.AUTOTUNE).batch(32).prefetch(tf.data.AUTOTUNE))
 
     labels = table.column("label").to_numpy()
-    num_classes = int(labels.max() + 1)
 
     #model arch
     def build_model(num_classes):
@@ -275,7 +304,7 @@ def main():
         return Model(inputs, outputs)
 
     labels = table.column("label").to_numpy()
-    num_classes = len(np.unique(labels))
+    num_classes = int(labels.max()) + 1
     model = build_model(num_classes)
     loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
 
@@ -296,10 +325,13 @@ def main():
 
     )
 
-    optimizer = tf.keras.optimizers.SGD(learning_rate = 1e-3, momentum = 0.9, nesterov = True)
+    steps_per_epoch = train_size // 32
+    val_steps = (num_samples - train_size) // 32
+
+    optimizer = tf.keras.optimizers.SGD(learning_rate = 0.05, momentum = 0.9, nesterov = True)
 
     model.compile(optimizer = optimizer, loss = loss, metrics = ['accuracy'])
-    model.fit(train, epochs = 256, validation_data = test, callbacks = [ES, MC],)
+    model.fit(train, epochs = 256, steps_per_epoch = steps_per_epoch, validation_data = test, validation_steps = val_steps, callbacks = [ES, MC],)
 
 if __name__ == "__main__":
     main()
