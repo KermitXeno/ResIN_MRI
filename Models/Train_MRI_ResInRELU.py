@@ -154,11 +154,8 @@ class ResRELU(tf.keras.layers.Layer):
 
         y = self.conv3(y)
 
-        # Squeeze-and-Excitation
-        se = self.global_pool(y)
-        se = self.se_reduce(se)
-        se = self.se_expand(se)
-        se = Reshape((1, 1, self.out_channels))(se)
+        # Squeeze-and-Excitation here when i find a good implementation
+       
         y = Multiply()([y, se])
 
         # Stochastic Depth
