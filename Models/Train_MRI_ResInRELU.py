@@ -2,6 +2,9 @@
 """
 @author: elamr
 
+This is a custom implementation of a Residual Network with RELU and Inception blocks for Alzheimer's MRI
+classification that uses modern regularization techniques like Stochastic Depth and DropBlock.
+
 @dataset{alzheimer_mri_dataset,
   author = {Falah.G.Salieh},
   title = {Alzheimer MRI Dataset},

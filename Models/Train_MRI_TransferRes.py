@@ -3,6 +3,15 @@
 @author: elamr
 This is a transfer learning implementation using ResNet50V2 with imagenet weights for Alzheimer's MRI classification.
 
+@dataset{alzheimer_mri_dataset,
+  author = {Falah.G.Salieh},
+  title = {Alzheimer MRI Dataset},
+  year = {2023},
+  publisher = {Hugging Face},
+  version = {1.0},
+  url = {https://huggingface.co/datasets/Falah/Alzheimer_MRI}
+}
+
 """
 import tensorflow as tf
 from tensorflow.keras import Model
@@ -118,7 +127,6 @@ def main():
 
     steps_per_epoch = train_size // 32
 
-    #REMINDER, DO NOT REMOVE STEPS PER EPOCH OR IT WILL NOT STOP TRAINING!!!
     model.fit(train,epochs = 64 ,steps_per_epoch = train_size // 32, validation_data = test, validation_steps = (num_samples - train_size) // 32, callbacks = [ES, MC])
 
 if __name__ == "__main__":

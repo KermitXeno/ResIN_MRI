@@ -2,6 +2,9 @@
 """
 @author: elamr
 
+This is a custom ResNet-Inception architecture using SELU activations for Alzheimer's MRI classification.
+This implementation is not for production and is an exploration of self normalizing neural networks in residual and inception architectures.
+
 @dataset{alzheimer_mri_dataset,
   author = {Falah.G.Salieh},
   title = {Alzheimer MRI Dataset},
@@ -24,7 +27,7 @@ from PIL import Image
 import os
 import io
 
-#ALL ARC COMPONENTS AND PROBLEMS ARE HERE IN THE TWO DEFS, ALL LAYERS NEED TO BE SELU COMPATIBLE
+#ALL ARC COMPONENTS AND PROBLEMS ARE HERE IN THE TWO CLASSES, ALL LAYERS NEED TO BE SELU COMPATIBLE
 class ResSELU(tf.keras.layers.Layer):
     def __init__(self, out_channels, stride = 1, dropout_rate = 0.05, alpha_init = 0.5):
         super().__init__()
