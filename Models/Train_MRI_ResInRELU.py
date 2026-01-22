@@ -29,8 +29,6 @@ import io
 from GNNpkg.RELUres import ResRELU
 from GNNpkg.RELUincep import RELUInception
 
-base_dir = os.path.dirname(os.path.abspath(__file__))
-
 #PIPELINE AND ALL PIPLINE PROBLEMS ARE IN THE GENERATOR AND PREPROCESSING
 def parquet_generator(table):
     for idx, row in enumerate(table.to_pylist()):
@@ -66,6 +64,7 @@ def preprocess(x, y):
     return x, y
 
 def main():
+    base_dir = os.path.dirname(os.path.abspath(__file__))
     dataloc = os.path.join(base_dir, 'data')
     table = pq.read_table(dataloc)
     pathsave = os.path.join(base_dir, "weights", "MRIRELUresin.keras")

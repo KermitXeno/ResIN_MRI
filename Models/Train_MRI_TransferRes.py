@@ -24,8 +24,6 @@ import numpy as np
 from PIL import Image
 import os, io
 
-base_dir = os.path.dirname(os.path.abspath(__file__))
-
 def parquet_generator(table):
     for row in table.to_pylist():
         img = row["image"]
@@ -84,6 +82,7 @@ def resnet50v2(num_classes):
     return Model(EXTModel.input, outputs)
 
 def main():
+    base_dir = os.path.dirname(os.path.abspath(__file__))
     dataloc = os.path.join(base_dir, 'data')
     table = pq.read_table(dataloc)
     pathsave = os.path.join(base_dir, "weights", "MRIresnet50v2.keras")
