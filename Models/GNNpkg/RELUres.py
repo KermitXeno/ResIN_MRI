@@ -86,11 +86,7 @@ class ResRELU(tf.keras.layers.Layer):
 
         self.conv3 = Conv2D(self.out_channels, 1, padding = 'same', use_bias = False, kernel_initializer = 'he_normal')
 
-        # Squeeze-and-Excitation
-        self.global_pool = GlobalAveragePooling2D()
-        se_width = max(1, self.mid_channels // reduction)
-        self.se_reduce = Dense(se_width, activation='relu')
-        self.se_expand = Dense(self.out_channels, activation = 'sigmoid')
+        #Squeeze and exitation should be here with new implementation class
 
         # Regularizers
         self.dropblock = DropBlock2D(block_size, dropblock_keep_prob)
@@ -139,3 +135,5 @@ class ResRELU(tf.keras.layers.Layer):
 
         # Final merge
         return shortcut + y
+
+#TODO Squeeze and exitation implementation here when i find a good class

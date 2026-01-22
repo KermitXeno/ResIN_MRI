@@ -134,12 +134,12 @@ def main():
     )
 
     steps_per_epoch = train_size // 32
-    validation_steps = (num_samples - train_size) // 32
+    val_steps = (num_samples - train_size) // 32
 
     optimizer = tf.keras.optimizers.SGD(learning_rate = 1e-3, momentum = 0.9, nesterov = True)
 
     model.compile(optimizer = optimizer, loss = loss, metrics = ['accuracy'])
-    model.fit(train, epochs = 256, validation_data = test, steps_per_epoch=steps_per_epoch, callbacks = [ES, MC],)
+    model.fit(train, epochs = 256, validation_data = test, steps_per_epoch=steps_per_epoch, validation_steps = val_steps, callbacks = [ES, MC],)
 
 if __name__ == "__main__":
     main()

@@ -1,3 +1,5 @@
+# SELU Inception Module for TensorFlow/Keras : this module is retired and needs to be changed somehow
+
 import tensorflow as tf
 from tensorflow.keras.layers import Conv2D, AlphaDropout
 
