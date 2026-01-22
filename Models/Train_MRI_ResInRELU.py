@@ -27,7 +27,7 @@ from PIL import Image
 import os
 import io
 from GNNpkg.RELUres import ResRELU
-from GNNpkg.RELUincep import RELUInception
+from GNNpkg.RELUincep import InceptionRes
 
 #PIPELINE AND ALL PIPLINE PROBLEMS ARE IN THE GENERATOR AND PREPROCESSING
 def parquet_generator(table):
@@ -87,21 +87,21 @@ def main():
     def build_model(num_classes):
         inputs = Input(shape = (128, 128, 3))
 
-        x = Conv2D(64, 3, padding = "same", activation = 'relu', kernel_initializer = "he_normal", use_bias = False)(inputs)
+        x = Conv2D(128, 3, padding = "same", activation = 'relu', kernel_initializer = "he_normal", use_bias = False)(inputs)
         x = BatchNormalization()(x)
 
 
-        x = ResRELU(64)(x)
-        x = ResRELU(64, stride = 2)(x)
-        x = RELUInception(64)(x)
-
         x = ResRELU(128)(x)
         x = ResRELU(128, stride = 2)(x)
-        x = RELUInception(128)(x)
+        x = InceptionRes(128, gate_scale = 0.2)(x)
 
         x = ResRELU(256)(x)
         x = ResRELU(256, stride = 2)(x)
-        x = RELUInception(256)(x)
+        x = InceptionRes(256, gate_scale = 0.3)(x)
+
+        x = ResRELU(512)(x)
+        x = ResRELU(512, stride = 2)(x)
+        x = InceptionRes(512, gate_scale = 0.4)(x)
 
         x = GlobalAveragePooling2D()(x)
 

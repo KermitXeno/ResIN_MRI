@@ -94,15 +94,15 @@ def main():
 
         x = ResSELU(128)(x)
         x = ResSELU(128, stride=2)(x)
-        x = SELUInception(128)(x)
+        x = SELUInception(128, scale = 0.2)(x)
 
         x = ResSELU(128)(x)
         x = ResSELU(128, stride=2)(x)
-        x = SELUInception(128)(x)
+        x = SELUInception(128, scale = 0.3)(x)
 
         x = ResSELU(256)(x)
         x = ResSELU(256, stride=2)(x)
-        x = SELUInception(256)(x)
+        x = SELUInception(256, scale = 0.4)(x)
 
         x = GlobalAveragePooling2D()(x)
 

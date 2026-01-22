@@ -1,12 +1,30 @@
 import tensorflow as tf
 from tensorflow.keras.layers import Conv2D, AlphaDropout, MaxPooling2D, BatchNormalization, ReLU
 
+#Residual wrapper for inception block
+
+class InceptionRes(tf.keras.layers.Layer):
+    def __init__(self, channels, scale = 0.2, **kwargs):
+        super().__init__(**kwargs)
+        self.incep = RELUInception(channels, scale=scale)
+        self.scale = scale
+        self.shortcut_conv = None 
+
+    def build(self, input_shape):
+        if input_shape[-1] != self.incep.channels:
+            self.shortcut_conv = Conv2D(self.incep.channels, 1, padding="same", use_bias = False, kernel_initializer = "he_normal")
+        super().build(input_shape)
+
+    def call(self, x, training = None):
+        shortcut = x if self.shortcut_conv is None else self.shortcut_conv(x)
+        y = self.incep(x, training = training)
+        return shortcut + self.scale * y
 
 class RELUInception(tf.keras.layers.Layer):
-    def __init__(self, channels, gate_scale = 0.1):
+    def __init__(self, channels, scale = 0.1):
         super().__init__()
         self.channels = channels
-        self.gate_scale = gate_scale
+        self.gate_scale = scale
 
         self.inv_sqrt2 = tf.constant(1.0 / tf.sqrt(2.0), tf.float32)
         self.inv_sqrt4 = tf.constant(1.0 / tf.sqrt(4.0), tf.float32)
@@ -51,7 +69,7 @@ class RELUInception(tf.keras.layers.Layer):
         # Gating
         g = self.gate_bn(self.gate(x), training=training)
         g = tf.sigmoid(self.gate_scale * g)
-
+        
         y = y * g
 
         # Residual merge with variance control
