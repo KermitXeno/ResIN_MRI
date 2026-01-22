@@ -1,3 +1,5 @@
+#RESNET style residual block with ReLU activations
+
 import tensorflow as tf
 from tensorflow.keras.layers import Conv2D, BatchNormalization, ReLU, GlobalAveragePooling2D, Dense, Multiply
 

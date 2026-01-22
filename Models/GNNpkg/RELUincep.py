@@ -1,8 +1,9 @@
+ #inception block with residual wrapper and ReLU activations
+
 import tensorflow as tf
 from tensorflow.keras.layers import Conv2D, AlphaDropout, MaxPooling2D, BatchNormalization, ReLU
 
 #Residual wrapper for inception block
-
 class InceptionRes(tf.keras.layers.Layer):
     def __init__(self, channels, scale = 0.2, **kwargs):
         super().__init__(**kwargs)
