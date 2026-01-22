@@ -5,3 +5,4 @@
 /Models/weights/sekuresinc.keras
 /Models/weights/MRIRELUresin.keras
 /Models/weights/MRIresnet50v2.keras
+/Models/GNNpkg/__pycache__/*
