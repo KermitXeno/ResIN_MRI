@@ -3,10 +3,10 @@ import tensorflow as tf
 from tensorflow.keras.layers import Conv2D, AlphaDropout, MaxPooling2D
 
 class SELUInception(tf.keras.layers.Layer):
-    def __init__(self, channels, gate_scale = 0.1):
+    def __init__(self, channels, scale = 0.1):
         super().__init__()
         self.channels = channels
-        self.gate_scale = gate_scale
+        self.gate_scale = scale
         self.inv_sqrt2 = tf.constant(1.0 / tf.sqrt(2.0), tf.float32)
         self.inv_sqrt4 = tf.constant(1.0 / tf.sqrt(4.0), tf.float32)
 

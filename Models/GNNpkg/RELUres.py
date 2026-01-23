@@ -126,9 +126,7 @@ class ResRELU(tf.keras.layers.Layer):
         y = self.conv3(y)
 
         # Squeeze-and-Excitation here when i find a good implementation
-       
-        y = Multiply()([y, se])
-
+    
         # Stochastic Depth
         y = self.stoch_depth(y, training = training)
 

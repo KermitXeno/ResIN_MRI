@@ -93,15 +93,15 @@ def main():
 
         x = ResRELU(128)(x)
         x = ResRELU(128, stride = 2)(x)
-        x = InceptionRes(128, gate_scale = 0.2)(x)
+        x = InceptionRes(128, scale = 0.2)(x)
 
         x = ResRELU(256)(x)
         x = ResRELU(256, stride = 2)(x)
-        x = InceptionRes(256, gate_scale = 0.3)(x)
+        x = InceptionRes(256, scale = 0.3)(x)
 
         x = ResRELU(512)(x)
         x = ResRELU(512, stride = 2)(x)
-        x = InceptionRes(512, gate_scale = 0.4)(x)
+        x = InceptionRes(512, scale = 0.4)(x)
 
         x = GlobalAveragePooling2D()(x)
 
