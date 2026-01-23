@@ -5,7 +5,7 @@ from tensorflow.keras.layers import Conv2D, AlphaDropout, MaxPooling2D, BatchNor
 
 #Residual wrapper for inception block
 class InceptionRes(tf.keras.layers.Layer):
-    def __init__(self, channels, scale, **kwargs):
+    def __init__(self, channels, scale = 0.1, **kwargs):
         super().__init__(**kwargs)
         self.incep = RELUInception(channels, scale=scale)
         self.scale = scale
