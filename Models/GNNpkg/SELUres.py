@@ -10,14 +10,8 @@ class ResSELU(tf.keras.layers.Layer):
         self.out_channels = out_channels
         self.stride = stride
 
-        self.conv1 = Conv2D(
-            out_channels, 3, padding = "same",
-            kernel_initializer = "lecun_normal", use_bias = False
-        )
-        self.conv2 = Conv2D(
-            out_channels, 3, strides = stride, padding = "same",
-            kernel_initializer = "lecun_normal", use_bias = False
-        )
+        self.conv1 = Conv2D(out_channels, 3, padding = "same", kernel_initializer = "lecun_normal", use_bias = False)
+        self.conv2 = Conv2D(out_channels, 3, strides = stride, padding = "same", kernel_initializer = "lecun_normal", use_bias = False)
 
         self.dropout = AlphaDropout(dropout_rate)
         self.shortcut = None
@@ -33,10 +27,7 @@ class ResSELU(tf.keras.layers.Layer):
 
     def build(self, input_shape):
         if self.stride != 1 or input_shape[-1] != self.out_channels:
-            self.shortcut = Conv2D(
-                self.out_channels, 1, strides = self.stride,
-                padding = "same", kernel_initializer = "lecun_normal", use_bias = False
-            )
+            self.shortcut = Conv2D(self.out_channels, 1, strides = self.stride, padding = "same", kernel_initializer = "lecun_normal", use_bias = False)
         super().build(input_shape)
 
     def call(self, x, training = None):

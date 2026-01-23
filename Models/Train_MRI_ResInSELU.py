@@ -17,8 +17,7 @@ This implementation is not for production and is an exploration of self normaliz
 """
 
 import tensorflow as tf
-from tensorflow import keras
-from tensorflow.keras.models import Model, Sequential
+from tensorflow.keras.models import Model
 from tensorflow.keras.layers import *
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 import pyarrow.parquet as pq

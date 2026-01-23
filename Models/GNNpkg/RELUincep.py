@@ -1,7 +1,7 @@
  #inception block with residual wrapper and ReLU activations
 
 import tensorflow as tf
-from tensorflow.keras.layers import Conv2D, AlphaDropout, MaxPooling2D, BatchNormalization, ReLU
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, BatchNormalization, ReLU
 
 #Residual wrapper for inception block
 class InceptionRes(tf.keras.layers.Layer):

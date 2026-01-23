@@ -1,6 +1,6 @@
 # SELU Inception Module for TensorFlow/Keras : this module is retired and needs to be changed somehow
 import tensorflow as tf
-from tensorflow.keras.layers import Conv2D, AlphaDropout, MaxPooling2D
+from tensorflow.keras.layers import Conv2D, MaxPooling2D
 
 class SELUInception(tf.keras.layers.Layer):
     def __init__(self, channels, scale = 0.1):
@@ -10,12 +10,9 @@ class SELUInception(tf.keras.layers.Layer):
         self.inv_sqrt2 = tf.constant(1.0 / tf.sqrt(2.0), tf.float32)
         self.inv_sqrt4 = tf.constant(1.0 / tf.sqrt(4.0), tf.float32)
 
-        self.b1 = Conv2D(channels, 1, padding = "same",
-                         kernel_initializer = "lecun_normal", use_bias = True)
-        self.b3 = Conv2D(channels, 3, padding = "same",
-                         kernel_initializer = "lecun_normal", use_bias = True)
-        self.b5 = Conv2D(channels, 5, padding = "same",
-                         kernel_initializer = "lecun_normal", use_bias = True)
+        self.b1 = Conv2D(channels, 1, padding = "same", kernel_initializer = "lecun_normal", use_bias = True)
+        self.b3 = Conv2D(channels, 3, padding = "same", kernel_initializer = "lecun_normal", use_bias = True)
+        self.b5 = Conv2D(channels, 5, padding = "same", kernel_initializer = "lecun_normal", use_bias = True)
 
         self.pool = MaxPooling2D(3, strides = 1, padding = "same")
         self.bp = Conv2D(channels, 1, padding = "same", kernel_initializer = "lecun_normal", use_bias=True)
@@ -26,10 +23,7 @@ class SELUInception(tf.keras.layers.Layer):
 
     def build(self, input_shape):
         if input_shape[-1] != self.channels:
-            self.proj = Conv2D(
-                self.channels, 1, padding = "same",
-                kernel_initializer = "lecun_normal", use_bias = True
-            )
+            self.proj = Conv2D(self.channels, 1, padding = "same", kernel_initializer = "lecun_normal", use_bias = True)
 
     def call(self, x):
         shortcut = x if self.proj is None else self.proj(x)

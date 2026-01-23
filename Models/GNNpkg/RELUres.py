@@ -1,7 +1,7 @@
 #RESNET style residual block with ReLU activations
 
 import tensorflow as tf
-from tensorflow.keras.layers import Conv2D, BatchNormalization, ReLU, GlobalAveragePooling2D, Dense, Multiply
+from tensorflow.keras.layers import Conv2D, BatchNormalization, ReLU, Multiply
 
 class StochasticDepth(tf.keras.layers.Layer):
     def __init__(self, survival_prob, **kwargs):
