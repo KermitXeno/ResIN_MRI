@@ -64,7 +64,7 @@ def preprocess(x, y):
     x = tf.image.per_image_standardization(x)
     return x, y
 
-def main():
+def trainResinSELU():
     base_dir = os.path.dirname(os.path.abspath(__file__))
     dataloc = os.path.join(base_dir, 'data')
     table = pq.read_table(dataloc)
@@ -140,4 +140,4 @@ def main():
     model.fit(train, epochs = 256, validation_data = test, steps_per_epoch=steps_per_epoch, validation_steps = val_steps, callbacks = [ES, MC],)
 
 if __name__ == "__main__":
-    main()
+    trainResinSELU()

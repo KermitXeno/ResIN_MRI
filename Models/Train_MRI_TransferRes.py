@@ -58,7 +58,7 @@ def preprocess(x, y):
     x = tf.image.resize(x, (128, 128))
     return x, y
 
-def resnet50v2(num_classes):
+def trainResnet50v2(num_classes):
 
     EXTModel = ResNet50V2(
         include_top = False,
@@ -102,7 +102,7 @@ def main():
     labels = table.column("label").to_numpy()
     num_classes = int(labels.max() + 1)
 
-    model = resnet50v2(num_classes)
+    model = trainResnet50v2(num_classes)
 
     loss = tf.keras.losses.SparseCategoricalCrossentropy()
 

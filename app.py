@@ -1,18 +1,12 @@
 # -*- coding: utf-8 -*-
-"""
-@author: elamr
-This is a transfer learning implementation using ResNet50V2 with imagenet weights for Alzheimer's MRI classification.
 
-"""
 import sys
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QSplitter, QLabel, QVBoxLayout
 from PySide6.QtCore import Qt
 
 
 class Section(QWidget):
-    """
-    Simple placeholder 
-    """
+
     def __init__(self, title: str):
         super().__init__()
 
@@ -45,14 +39,14 @@ class MainWindow(QMainWindow):
 
         left_splitter = QSplitter(Qt.Vertical)
 
-        left_top = Section("Left Top Section")
-        left_bottom = Section("Left Bottom Section")
+        left_top = Section("Image Selection")
+        left_bottom = Section("Model Selection")
 
         left_splitter.addWidget(left_top)
         left_splitter.addWidget(left_bottom)
         left_splitter.setSizes([400, 400])
 
-        right_section = Section("Right Section")
+        right_section = Section("Model Window")
 
         main_splitter.addWidget(left_splitter)
         main_splitter.addWidget(right_section)
