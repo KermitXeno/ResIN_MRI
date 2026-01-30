@@ -1,4 +1,4 @@
-#TODO: implement model initialization functions for each model
+
 import os
 import tensorflow as tf
 from tensorflow import keras
@@ -33,8 +33,6 @@ def initRELURES():
     optimizer = tf.keras.optimizers.SGD(learning_rate = 0.05, momentum = 0.9, nesterov = True)
     model.compile(optimizer = optimizer, loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True), metrics = ['accuracy'])
     return model
-
-#todo: add function to create folders that might be missing due to git pull
 
 if __name__ == "__main__":
     initialize()
