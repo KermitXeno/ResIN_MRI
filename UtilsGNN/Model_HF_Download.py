@@ -6,16 +6,12 @@ MRIp   = os.path.dirname(UTILSp)
 MODELp = os.path.join(MRIp, "Models")
 MODELp = os.path.join(MODELp, "weights")
 
-def download_keras_files(
-    repo_id: str,
-    local_dir: str = ".",
-    revision: str = "main"
-):
+def download_keras_files(repoid: str, localdir: str = ".", revision: str = "main"):
 
     api = HfApi()
-    os.makedirs(local_dir, exist_ok = True)
+    os.makedirs(localdir, exist_ok = True)
 
-    files = api.list_repo_files(repo_id = repo_id, revision = revision)
+    files = api.list_repo_files(repo_id = repoid, revision = revision)
 
     kerasfiles = [f for f in files if f.endswith(".keras")]
 
@@ -25,16 +21,16 @@ def download_keras_files(
 
     for file_path in kerasfiles:
         filename = os.path.basename(file_path)
-        destination_path = os.path.join(local_dir, filename)
+        destination_path = os.path.join(localdir, filename)
 
         if os.path.exists(destination_path):
             os.remove(destination_path)
 
         hf_hub_download(
-            repo_id = repo_id,
+            repo_id = repoid,
             filename = file_path,
             revision = revision,
-            local_dir = local_dir,
+            local_dir = localdir,
             local_dir_use_symlinks = False,
             force_download = True
         )
@@ -45,6 +41,6 @@ def download_keras_files(
 
 if __name__ == "__main__":
     download_keras_files(
-        repo_id = "KermitXeno/MRIBLandRESIN",
-        local_dir = MODELp
+        repoid = "KermitXeno/MRIBLandRESIN",
+        localdir = MODELp
     )
