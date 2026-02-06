@@ -8,8 +8,6 @@ from tensorflow import keras
 from Models.Train_MRI_ResInRELU import build_model
 from Models.Train_MRI_TransferRes import trainResnet50v2
 
-global tpath, rpath
-
 def initialize():
     UTILSp = os.path.dirname(os.path.abspath(__file__))
     MRIp   = os.path.dirname(UTILSp)
