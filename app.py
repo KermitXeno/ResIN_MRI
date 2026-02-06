@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 
 import sys
+import os
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QSplitter, QLabel, QVBoxLayout
 from PySide6.QtCore import Qt
 import UtilsGNN
 from UtilsGNN.Model_Init import *
 from UtilsGNN.Model_HF_Download import *
+from Models.Model_Grad_Cam import GradCAM
 
 #todo add top bars to the windows, display titles of splitters on the bars and various tools
 
@@ -34,7 +36,6 @@ class SectionFileSelect(QWidget):
 
 #todo add buttons for model options, check that the models exist, have button to load and unload them into memory.
 class SectionModelSelect(QWidget):
-    global resinrelu, resinresnettrans
 
     def __init__(self, title: str):
         super().__init__()
@@ -90,7 +91,6 @@ class MainWindow(QMainWindow):
         main_splitter = QSplitter(Qt.Horizontal)
 
         left_splitter = QSplitter(Qt.Vertical)
-
         left_top = SectionFileSelect("Image Selection")
         left_bottom = SectionModelSelect("Model Selection")
 
@@ -98,19 +98,49 @@ class MainWindow(QMainWindow):
         left_splitter.addWidget(left_bottom)
         left_splitter.setSizes([400, 400])
 
-        right_section = SectionOutput("Model Window")
+        self.right_section = SectionOutput("Model Window")
 
         main_splitter.addWidget(left_splitter)
-        main_splitter.addWidget(right_section)
+        main_splitter.addWidget(self.right_section)
         main_splitter.setSizes([400, 800])
 
         self.setCentralWidget(main_splitter)
 
+        self.resinrelu = None
+        self.resinresnettrans = None
+
+        self.gradcam_resnet = None
+        self.gradcam_resin = None
+
 
 if __name__ == "__main__":
-    UtilsGNN.initialize
+    tpath, rpath = initialize()
+
+    if not (os.path.exists(tpath) and os.path.exists(rpath)):
+        download_keras_files(repoid = "KermitXeno/MRIBLandRESIN",localdir = MODELp)
+
+    resinrelu = initRELURES(rpath)
+    #resinresnettrans = initRELUtrans(tpath)
+
+    resinrelu.summary()
+
+    resinrelu.trainable = False
+    #resinresnettrans.trainable = False
 
     app = QApplication(sys.argv)
     window = MainWindow()
+    window.resinrelu = resinrelu
+    #window.resinresnettrans = resinresnettrans
+
+    #window.gradcam_resnet = GradCAM(
+    #    model=resinresnettrans,
+    #    targetlayer="target"
+    #)
+
+    window.gradcam_resin = GradCAM(
+        model=resinrelu,
+        targetlayer="target" 
+    )
+
     window.show()
     sys.exit(app.exec())

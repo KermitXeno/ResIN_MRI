@@ -25,8 +25,13 @@ import numpy as np
 from PIL import Image
 import os
 import io
-from GNNpkg.RELUres import ResRELU
-from GNNpkg.RELUincep import InceptionRes
+
+if __package__ == "" or __package__ is None:
+    from GNNpkg.RELUres import ResRELU
+    from GNNpkg.RELUincep import RELUInception
+else:
+    from Models.GNNpkg.RELUres import ResRELU
+    from Models.GNNpkg.RELUincep import RELUInception
 
 #PIPELINE AND ALL PIPLINE PROBLEMS ARE IN THE GENERATOR AND PREPROCESSING
 def parquet_generator(table):
@@ -62,11 +67,38 @@ def preprocess(x, y):
     x = tf.image.per_image_standardization(x)
     return x, y
 
+    #model arch
+def build_model(num_classes):
+    inputs = Input(shape = (128, 128, 3))
+
+    x = Conv2D(64, 3, padding = "same", activation = 'relu', kernel_initializer = "he_normal", use_bias = False)(inputs)
+    x = BatchNormalization()(x)
+
+
+    x = ResRELU(64)(x)
+    x = ResRELU(64, stride = 2)(x)
+    x = RELUInception(128, scale = 0.2)(x)
+
+    x = ResRELU(128)(x)
+    x = ResRELU(128, stride = 2)(x)
+    x = RELUInception(256, scale = 0.3)(x)
+
+    x = ResRELU(256)(x)
+    x = ResRELU(256, stride = 2)(x)
+    x = RELUInception(256, scale = 0.4)(x)
+
+    x = Conv2D(512, 1, padding = "same", activation = 'relu', kernel_initializer = "he_normal", name = "target")(x)
+    x = GlobalAveragePooling2D()(x)
+
+    outputs = Dense(num_classes, kernel_initializer = "he_normal")(x)
+
+    return Model(inputs, outputs)
+
 def trainResinRELU():
     base_dir = os.path.dirname(os.path.abspath(__file__))
     dataloc = os.path.join(base_dir, 'data')
     table = pq.read_table(dataloc)
-    pathsave = os.path.join(base_dir, "weights", "MRIRELUresin.keras")
+    pathsave = os.path.join(base_dir, "weights", "MRIRELUresin.weights.h5")
 
     num_samples = table.num_rows
 
@@ -81,32 +113,6 @@ def trainResinRELU():
     test = (test.map(preprocess, num_parallel_calls = tf.data.AUTOTUNE).batch(32).prefetch(tf.data.AUTOTUNE))
 
     labels = table.column("label").to_numpy()
-
-    #model arch
-    def build_model(num_classes):
-        inputs = Input(shape = (128, 128, 3))
-
-        x = Conv2D(64, 3, padding = "same", activation = 'relu', kernel_initializer = "he_normal", use_bias = False)(inputs)
-        x = BatchNormalization()(x)
-
-
-        x = ResRELU(64)(x)
-        x = ResRELU(64, stride = 2)(x)
-        x = InceptionRes(128, scale = 0.2)(x)
-
-        x = ResRELU(128)(x)
-        x = ResRELU(128, stride = 2)(x)
-        x = InceptionRes(256, scale = 0.3)(x)
-
-        x = ResRELU(256)(x)
-        x = ResRELU(256, stride = 2)(x)
-        x = InceptionRes(256, scale = 0.4)(x)
-
-        x = GlobalAveragePooling2D()(x)
-
-        outputs = Dense(num_classes, kernel_initializer = "he_normal")(x)
-
-        return Model(inputs, outputs)
 
     labels = table.column("label").to_numpy()
     num_classes = int(labels.max()) + 1
@@ -125,6 +131,7 @@ def trainResinRELU():
         filepath = pathsave,
         monitor = "val_loss",
         save_best_only = True,
+        save_weights_only=True,
         verbose = 1,
         save_freq = "epoch",
 

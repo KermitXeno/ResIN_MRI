@@ -74,7 +74,7 @@ def trainResnet50v2(num_classes):
     x = Dense(256, activation = "relu", kernel_initializer = "he_normal", kernel_regularizer = regularizers.l2(5e-4))(x)
     x = Dropout(0.1)(x)
 
-    x = Dense(128, activation = "relu", kernel_initializer = "he_normal", kernel_regularizer = regularizers.l2(5e-4))(x)
+    x = Dense(128, activation = "relu", kernel_initializer = "he_normal", kernel_regularizer = regularizers.l2(5e-4), name = "target")(x)
     x = Dropout(0.1)(x)
 
     outputs = Dense(num_classes, activation = "softmax", kernel_initializer="glorot_uniform" )(x)
@@ -85,7 +85,7 @@ def main():
     base_dir = os.path.dirname(os.path.abspath(__file__))
     dataloc = os.path.join(base_dir, 'data')
     table = pq.read_table(dataloc)
-    pathsave = os.path.join(base_dir, "weights", "MRIresnet50v2.keras")
+    pathsave = os.path.join(base_dir, "weights", "MRIresnet50v2.weights.h5")
 
     num_samples = table.num_rows
 
@@ -122,6 +122,7 @@ def main():
         filepath = pathsave,
         monitor = "val_loss",
         save_best_only = True,
+        save_weights_only=True,
         verbose = 1
     )
 

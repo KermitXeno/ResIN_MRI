@@ -1,7 +1,14 @@
 
 import os
+import sys
 import tensorflow as tf
 from tensorflow import keras
+#from Models.GNNpkg.RELUres import ResRELU
+#from Models.GNNpkg.RELUincep import RELUInception
+from Models.Train_MRI_ResInRELU import build_model
+from Models.Train_MRI_TransferRes import trainResnet50v2
+
+global tpath, rpath
 
 def initialize():
     UTILSp = os.path.dirname(os.path.abspath(__file__))
@@ -14,24 +21,40 @@ def initialize():
 
     MODELp = os.path.join(MODELp, "weights")
 
-    global tpath, rpath
-    tpath = os.path.join(MODELp, "MRIresnet50v2.keras")
-    rpath = os.path.join(MODELp, "MRIRELUresin.keras")
+    tpath = os.path.join(MODELp, "MRIresnet50v2.weights.h5")
+    rpath = os.path.join(MODELp, "MRIRELUresin.weights.h5")
 
-def initRELUtrans():
-    model = tf.keras.models.load_model(tpath, compile=False)
-    optimizer = tf.keras.optimizers.SGD(learning_rate = 1.5e-4, momentum = 0.9)
-    model.compile(optimizer = optimizer, loss = tf.keras.losses.SparseCategoricalCrossentropy(), metrics = ['accuracy'])
+    return tpath, rpath
+
+def initRELUtrans(tpath):
+    model = trainResnet50v2(4)
+    model.load_weights(tpath)
+
+    optimizer = tf.keras.optimizers.SGD(learning_rate=1.5e-4, momentum=0.9)
+    model.compile(
+        optimizer=optimizer,
+        loss=tf.keras.losses.SparseCategoricalCrossentropy(),
+        metrics=['accuracy']
+    )
     return model
+
 
 #selu is not currently supported in tf.keras.models.load_model
 def initSELURES():
     pass
 
-def initRELURES():
-    model = tf.keras.models.load_model(rpath, compile=False)
-    optimizer = tf.keras.optimizers.SGD(learning_rate = 0.05, momentum = 0.9, nesterov = True)
-    model.compile(optimizer = optimizer, loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True), metrics = ['accuracy'])
+def initRELURES(rpath):
+    model = build_model(4)
+    model.load_weights(rpath)
+
+    optimizer = tf.keras.optimizers.SGD(
+        learning_rate=0.05, momentum=0.9, nesterov=True
+    )
+    model.compile(
+        optimizer=optimizer,
+        loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+        metrics=['accuracy']
+    )
     return model
 
 if __name__ == "__main__":
