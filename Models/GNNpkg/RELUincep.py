@@ -3,7 +3,7 @@
 import tensorflow as tf
 from tensorflow.keras.layers import Conv2D, MaxPooling2D, BatchNormalization, ReLU
 
-#Residual wrapper for inception block
+#Residual wrapper for inception block (probably could make this into a package in itself to wrap any layer with residuals)
 class InceptionRes(tf.keras.layers.Layer):
     def __init__(self, channels, scale = 0.1, **kwargs):
         super().__init__(**kwargs)

@@ -4,7 +4,6 @@ import pyarrow as pa
 import numpy as np
 from PIL import Image
 import os, io
-from collections import defaultdict
 
 UTILS_DIR = os.path.dirname(os.path.abspath(__file__))
 MRI_DIR   = os.path.dirname(UTILS_DIR)

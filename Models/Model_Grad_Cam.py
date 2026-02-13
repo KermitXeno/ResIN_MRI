@@ -1,31 +1,39 @@
 import tensorflow as tf
 
+
 class GradCAM:
     def __init__(self, model, targetlayer):
-
         self.model = model
         self.targetlayer = targetlayer
 
-        self.gradmodel = tf.keras.models.Model(
-            inputs = model.inputs,
-            outputs = [model.get_layer(targetlayer).output, model.output])
+        self.feature_model = tf.keras.models.Model(
+            inputs=model.inputs,
+            outputs=model.get_layer(targetlayer).output,
+        )
 
-    def __call__(self, imagetensor, classidx = None):
+    def __call__(self, imagetensor):
 
-        with tf.GradientTape() as tape:
-            convout, preds = self.gradmodel(imagetensor, training = False)
+        features = self.feature_model(imagetensor, training=False)[0]
 
-            if classidx is None:
-                classidx = tf.argmax(preds[0])
+        h, w, c = features.shape
 
-            score = preds[:, classidx]
+        reshaped = tf.reshape(features, (-1, c)) 
 
-        grads = tape.gradient(score, convout)
+        reshaped -= tf.reduce_mean(reshaped, axis=0, keepdims=True)
 
-        weights = tf.reduce_mean(grads, axis = (1, 2))
-        cam = tf.reduce_sum(convout * weights[:, None, None, :], axis = -1)
+        cov = tf.matmul(reshaped, reshaped, transpose_a=True)  # (C, C)
+
+        eigvals, eigvecs = tf.linalg.eigh(cov)
+
+        principal = eigvecs[:, -1]
+
+        cam = tf.matmul(reshaped, principal[:, None]) 
+
+        cam = tf.reshape(cam, (h, w))
 
         cam = tf.nn.relu(cam)
-        cam /= tf.reduce_max(cam) + 1e-8
+        maxv = tf.reduce_max(cam)
+        if maxv > 0:
+            cam = cam / maxv
 
-        return cam[0].numpy()
+        return cam.numpy()

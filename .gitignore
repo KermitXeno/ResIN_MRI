@@ -8,3 +8,4 @@
 __pycache__/
 .cache/
 /Models/weights/MRIRELUresin.weights.h5
+/Models/weights/MRIresnet50v2.weights.h5
