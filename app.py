@@ -309,6 +309,11 @@ class MainWindow(QMainWindow):
     def onmodelchanged(self, mode: str):
         self.currentmode = mode
     
+    #'0': Mild_Demented
+    #'1': Moderate_Demented
+    #'2': Non_Demented
+    #'3': Very_Mild_Demented
+
     #RUN GRADCAM AND DISPLAY RESULTS(WITH SHOWCAM)
     def rungradcam(self, tensor, display, path):
         if self.currentmode == "resnet":
