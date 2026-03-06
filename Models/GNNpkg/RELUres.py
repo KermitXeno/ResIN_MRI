@@ -1,7 +1,7 @@
 #RESNET style residual block with ReLU activations
 
 import tensorflow as tf
-from tensorflow.keras.layers import Conv2D, BatchNormalization, ReLU, Multiply
+from tensorflow.keras.layers import Conv2D, BatchNormalization, ReLU, GlobalAveragePooling2D, Dense
 
 class StochasticDepth(tf.keras.layers.Layer):
     def __init__(self, survival_prob, **kwargs):
@@ -66,33 +66,47 @@ class DropBlock2D(tf.keras.layers.Layer):
 
         return tf.cond(tf.logical_or(h < self.block_size, w < self.block_size), no_drop, apply_dropblock,)
 
+class SqueezeExcitation(tf.keras.layers.Layer):
+    def __init__(self, channels, reduction = 16, **kwargs):
+        super().__init__(**kwargs)
+        bottleneck = max(1, channels // reduction)
+        self.gap = GlobalAveragePooling2D(keepdims = True)
+        self.d1 = Dense(bottleneck, activation = "relu", use_bias = True)
+        self.d1 = Dense(channels, activation = "sigmoid", use_bias = True)
+
+    def call(self, x):
+        scale = self.gap(x)
+        scale = self.d1(scale)
+        scale = self.d1(scale)
+        return x * scale
+
+def BNConv(filters, kernel, stride = 1):
+    return tf.keras.Sequential([
+        BatchNormalization(),
+        ReLU(),
+        Conv2D(filters, kernel, strides = stride, padding = "same", use_bias = False, kernel_initializer = "he_normal"),
+    ])
+
 class ResRELU(tf.keras.layers.Layer):
-    def __init__(self, channels, stride = 1, reduction = 16, survival_prob = 1.0, dropblock_keep_prob = 1.0, block_size = 7, **kwargs):
+    
+    def __init__(self, channels, stride = 1, sereduction = 16, probs1 = 1.0, probs2 = 0.9, keeps1 = 1.0, keeps2 = 0.9, blocksize = 7, **kwargs,):
         super().__init__(**kwargs)
         self.out_channels = channels
         self.stride = stride
-        self.mid_channels = channels // 4
+        mid_channels = channels // 4
 
-        # Pre-activation
-        self.bn1 = BatchNormalization()
-        self.relu1 = ReLU()
+        self.conv1 = BNConv(mid_channels, 1)
+        self.se1 = SqueezeExcitation(mid_channels, reduction = max(1, sereduction // 4))
+        self.db1 = DropBlock2D(blocksize, keeps1)
+        self.sd1 = StochasticDepth(probs1)
 
-        # Bottleneck convs
-        self.conv1 = Conv2D(self.mid_channels, 1, padding = 'same', use_bias = False, kernel_initializer = 'he_normal')
-        self.bn2 = BatchNormalization()
-        self.relu2 = ReLU()
+        self.conv2 = BNConv(mid_channels, 3, stride=stride)
+        self.se2 = SqueezeExcitation(mid_channels, reduction = max(1, sereduction // 4))
+        self.db2 = DropBlock2D(blocksize, keeps2)
+        self.sd2 = StochasticDepth(probs2)
 
-        self.conv2 = Conv2D(self.mid_channels, 3, strides = stride, padding = 'same', use_bias = False, kernel_initializer = 'he_normal')
-        self.bn3 = BatchNormalization()
-        self.relu3 = ReLU()
-
-        self.conv3 = Conv2D(self.out_channels, 1, padding = 'same', use_bias = False, kernel_initializer = 'he_normal')
-
-        # Squeeze and exitation should be here with new implementation class
-
-        # Regularizers
-        self.dropblock = DropBlock2D(block_size, dropblock_keep_prob)
-        self.stoch_depth = StochasticDepth(survival_prob)
+        self.conv3 = BNConv(channels, 1)
+        self.se3 = SqueezeExcitation(channels, reduction = sereduction)
 
         # Shortcut
         self.shortcut_conv = None
@@ -104,36 +118,25 @@ class ResRELU(tf.keras.layers.Layer):
         super().build(input_shape)
 
     def call(self, x, training = None):
-        # Pre-activation
-        y = self.bn1(x, training = training)
-        y = self.relu1(y)
+        kw = dict(training=training)
 
-        # Shortcut path
-        if self.shortcut_conv:
-                shortcut = self.shortcut_bn(self.shortcut_conv(x), training=training)
+        if self.shortcut_conv is not None:
+            shortcut = self.shortcut_bn(self.shortcut_conv(x), **kw)
         else:
             shortcut = x
 
-        # Bottleneck conv path
-        y = self.conv1(y)
-        y = self.bn2(y, training = training)
-        y = self.relu2(y)
+        y = self.conv1(x, **kw)
+        y = self.se1(y)
+        y = self.db1(y, **kw)
+        y = self.sd1(y, **kw)
 
-        y = self.conv2(y)
-        y = self.bn3(y, training = training)
-        y = self.relu3(y)
+        y = self.conv2(y, **kw)
+        y = self.se2(y)
+        y = self.db2(y, **kw)
+        y = self.sd2(y, **kw)
 
-        y = self.conv3(y)
+        y = self.conv3(y, **kw)
+        y = self.se3(y)
 
-        # Squeeze-and-Excitation here when i find a good implementation
-    
-        # Stochastic Depth
-        y = self.stoch_depth(y, training = training)
-
-        # DropBlock
-        y = self.dropblock(y, training = training)
-
-        # Final merge
         return shortcut + y
 
-#TODO Squeeze and exitation implementation here when i find a good class
