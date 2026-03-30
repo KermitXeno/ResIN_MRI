@@ -68,7 +68,7 @@ def trainResinSELU():
     base_dir = os.path.dirname(os.path.abspath(__file__))
     dataloc = os.path.join(base_dir, 'data')
     table = pq.read_table(dataloc)
-    pathsave = os.path.join(base_dir, "weights", "MRISELUresin.keras")
+    pathsave = os.path.join(base_dir, "weights", "MRISELUresin.h5")
 
     num_samples = table.num_rows
 

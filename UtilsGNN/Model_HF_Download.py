@@ -13,7 +13,7 @@ def download_keras_files(repoid: str, localdir: str = ".", revision: str = "main
 
     files = api.list_repo_files(repo_id = repoid, revision = revision)
 
-    kerasfiles = [f for f in files if f.endswith(".weights.h5")]
+    kerasfiles = [f for f in files if f.endswith(".h5")]
 
     if not kerasfiles:
         print("No weights files found in the repository.")

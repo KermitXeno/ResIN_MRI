@@ -85,7 +85,7 @@ def main():
     base_dir = os.path.dirname(os.path.abspath(__file__))
     dataloc = os.path.join(base_dir, 'data')
     table = pq.read_table(dataloc)
-    pathsave = os.path.join(base_dir, "weights", "MRIresnet50v2.weights.h5")
+    pathsave = os.path.join(base_dir, "weights", "MRIresnet50v2.h5")
 
     num_samples = table.num_rows
 
@@ -113,7 +113,7 @@ def main():
 
     ES = EarlyStopping(
         monitor = "val_loss",
-        patience = 10,
+        patience = 8,
         min_delta = 0.0001,
         restore_best_weights = True
     )
@@ -122,7 +122,6 @@ def main():
         filepath = pathsave,
         monitor = "val_loss",
         save_best_only = True,
-        save_weights_only=True,
         verbose = 1
     )
 

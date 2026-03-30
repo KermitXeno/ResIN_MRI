@@ -20,8 +20,8 @@ def initialize():
 
     MODELp = os.path.join(MODELp, "weights")
 
-    tpath = os.path.join(MODELp, "MRIresnet50v2.weights.h5")
-    rpath = os.path.join(MODELp, "MRIRELUresin.weights.h5")
+    tpath = os.path.join(MODELp, "MRIresnet50v2.h5")
+    rpath = os.path.join(MODELp, "MRIRELUresin.h5")
 
     return tpath, rpath
 
@@ -44,7 +44,7 @@ def initSELURES():
 
 def initRELURES(rpath):
     model = build_model(4)
-    model.load_weights(rpath)
+    model.load_weights(rpath, by_name=True, skip_mismatch=True)
 
     optimizer = tf.keras.optimizers.SGD(
         learning_rate=0.05, momentum=0.9, nesterov=True

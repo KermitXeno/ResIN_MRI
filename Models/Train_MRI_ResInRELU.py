@@ -98,7 +98,7 @@ def trainResinRELU():
     base_dir = os.path.dirname(os.path.abspath(__file__))
     dataloc = os.path.join(base_dir, 'data')
     table = pq.read_table(dataloc)
-    pathsave = os.path.join(base_dir, "weights", "MRIRELUresin.weights.h5")
+    pathsave = os.path.join(base_dir, "weights", "MRIRELUresin.h5")
 
     num_samples = table.num_rows
 
@@ -122,7 +122,7 @@ def trainResinRELU():
     ES = EarlyStopping(
         monitor = "val_loss",
         min_delta = 0.0001,
-        patience = 16,
+        patience = 8,
         verbose = 1,
         mode = "auto",
         restore_best_weights = True,
@@ -131,7 +131,6 @@ def trainResinRELU():
         filepath = pathsave,
         monitor = "val_loss",
         save_best_only = True,
-        save_weights_only=True,
         verbose = 1,
         save_freq = "epoch",
 

@@ -2,7 +2,7 @@
 
 import sys
 import os
-from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QSplitter, QLabel, QVBoxLayout, QPushButton, QListWidget, QFileDialog, QListWidgetItem, QHBoxLayout
+from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QSplitter, QLabel, QVBoxLayout, QPushButton, QListWidget, QFileDialog, QListWidgetItem
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage, QPixmap
 import tensorflow as tf
