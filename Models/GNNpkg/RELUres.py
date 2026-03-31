@@ -9,7 +9,7 @@ class StochasticDepth(tf.keras.layers.Layer):
         self.survival_prob = survival_prob
 
     def call(self, x, training=None):
-        if not training or self.survival_prob == 1.0:
+        if training is False or self.survival_prob == 1.0:
             return x
         batch_size = tf.shape(x)[0]
         random_tensor = self.survival_prob + tf.random.uniform([batch_size, 1, 1, 1])
@@ -23,20 +23,17 @@ class DropBlock2D(tf.keras.layers.Layer):
         self.keep_prob = keep_prob
 
     def call(self, x, training=None):
-        if not training or self.keep_prob == 1.0:
+        if training is False or self.keep_prob == 1.0:
             return x
 
-    # Spatial dimensions
         h = tf.shape(x)[1]
         w = tf.shape(x)[2]
         c = tf.shape(x)[3]
 
-    # If feature map is smaller than block_size, skip DropBlock
         def no_drop():
             return x
 
         def apply_dropblock():
-            # Compute valid region sizes
             valid_h = tf.maximum(h - self.block_size + 1, 1)
             valid_w = tf.maximum(w - self.block_size + 1, 1)
 
@@ -46,10 +43,8 @@ class DropBlock2D(tf.keras.layers.Layer):
                 tf.cast(self.block_size ** 2 * valid_h * valid_w, tf.float32)
             )
 
-            # Sample mask
             mask = tf.cast(tf.random.uniform([tf.shape(x)[0], h, w, c]) < gamma,tf.float32,)
 
-            # Create blocks
             mask = -tf.nn.max_pool2d(-mask, ksize = self.block_size, strides = 1, padding = "VALID",)
 
             pad_h = h - tf.shape(mask)[1]
@@ -58,7 +53,6 @@ class DropBlock2D(tf.keras.layers.Layer):
 
             keep = 1.0 - mask
 
-            # Normalize activations
             keep_mean = tf.reduce_mean(keep, axis=[1, 2, 3], keepdims=True)
             keep = keep / tf.maximum(keep_mean, 1e-6)
 
@@ -75,12 +69,13 @@ class SqueezeExcitation(tf.keras.layers.Layer):
         self.gap = GlobalAveragePooling2D(keepdims=True)
 
     def build(self, input_shape):
-        bottleneck = max(1, self.channels // self.reduction)
+        in_channels = int(input_shape[-1])
+        bottleneck = max(1, in_channels // self.reduction)
 
         self.fc1 = Dense(bottleneck, activation="relu", use_bias=True)
-        self.fc2 = Dense(self.channels, activation="sigmoid", use_bias=True)
+        self.fc2 = Dense(in_channels, activation="sigmoid", use_bias=True)
 
-        self.fc1.build((None, 1, 1, self.channels))
+        self.fc1.build((None, 1, 1, in_channels))
         self.fc2.build((None, 1, 1, bottleneck))
 
         super().build(input_shape)
@@ -91,6 +86,7 @@ class SqueezeExcitation(tf.keras.layers.Layer):
         scale = self.fc2(scale)
         return x * scale
 
+
 class ResRELU(tf.keras.layers.Layer):
     
     def __init__(self, channels, stride = 1, sereduction = 16, probs1 = 1.0, probs2 = 0.9, keeps1 = 1.0, keeps2 = 0.9, blocksize = 7, **kwargs,):
@@ -99,29 +95,34 @@ class ResRELU(tf.keras.layers.Layer):
         self.stride = stride
         mid_channels = channels // 4
 
-        self.conv1 = BNConv(mid_channels, 1)
+        self.conv1 = Conv2D(mid_channels, 1, strides=stride, padding='same', use_bias=False, activation="relu", kernel_initializer='he_normal')
         self.se1 = SqueezeExcitation(mid_channels, reduction = max(1, sereduction // 4))
         self.db1 = DropBlock2D(blocksize, keeps1)
         self.sd1 = StochasticDepth(probs1)
 
-        self.conv2 = BNConv(mid_channels, 3, stride=stride)
+        self.conv2 = Conv2D(mid_channels, 3, strides=1, padding='same', use_bias=False, activation="relu", kernel_initializer='he_normal')
         self.se2 = SqueezeExcitation(mid_channels, reduction = max(1, sereduction // 4))
         self.db2 = DropBlock2D(blocksize, keeps2)
         self.sd2 = StochasticDepth(probs2)
 
-        self.conv3 = BNConv(channels, 1)
+        self.conv3 = Conv2D(channels, 1, strides=1, padding='same', use_bias=False, activation="relu", kernel_initializer='he_normal')
         self.se3 = SqueezeExcitation(channels, reduction = sereduction)
 
-        # Shortcut
         self.shortcut_conv = None
 
     def build(self, input_shape):
+        if input_shape is None or input_shape[-1] is None:
+            return
+
         if self.stride != 1 or input_shape[-1] != self.out_channels:
             self.shortcut_conv = Conv2D(self.out_channels, 1, strides = self.stride, padding = 'same', use_bias = False, kernel_initializer = 'he_normal')
             self.shortcut_bn = BatchNormalization()
         super().build(input_shape)
 
     def call(self, x, training = None):
+        if x is None:
+            raise ValueError("ResRELU received None as input")
+
         kw = dict(training=training)
 
         if self.shortcut_conv is not None:
@@ -143,4 +144,3 @@ class ResRELU(tf.keras.layers.Layer):
         y = self.se3(y)
 
         return shortcut + y
-
