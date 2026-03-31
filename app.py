@@ -339,6 +339,10 @@ if __name__ == "__main__":
     resinrelu = initRELURES(rpath)
     resinresnettrans = initRELUtrans(tpath)
 
+    #comment out after selecting target layer
+    resinrelu.summary()
+    resinresnettrans.summary()
+
     resinrelu.trainable = False
     resinresnettrans.trainable = False
 
