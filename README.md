@@ -1,9 +1,8 @@
 # ResIN
 ResIN is a custom deep learning architecture that aims to aid in alzheimers diagnostics by giving healthcare providers a tool for pointed analysis of specific
-sections of the brain, allow faster and more accurate diagnostics to occur, and provide visualazations of possible alzaheimers hot spots in MRI scans.
+sections of the brain, allow accurate diagnostics in said areas and, provide visualazations of possible physical indicators of Alzheimer's in MRI scans.
 
-ResIN is research informed and employs custom implementations of modern machine learning techniques such as:
-
+ResIN employs custom implementations of modern machine learning techniques such as:
 - Stochastic depth
 - Drop Block
 - Squeeze and exitation 
@@ -11,5 +10,6 @@ ResIN is research informed and employs custom implementations of modern machine 
 - Inception
 - Gating
 
-Run app.py to run the GUI of ResIN, The GUI of ResIN comes with a transfer learning resnet50v2 to act as a comparison to ResIN.
+Run app.py to run the user interface of ResIN. 
+ResIN's GUI comes with a resnet50v2 retrain to act as a comparison to ResIN.
 
