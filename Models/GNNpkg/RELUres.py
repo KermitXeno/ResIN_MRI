@@ -67,25 +67,29 @@ class DropBlock2D(tf.keras.layers.Layer):
         return tf.cond(tf.logical_or(h < self.block_size, w < self.block_size), no_drop, apply_dropblock,)
 
 class SqueezeExcitation(tf.keras.layers.Layer):
-    def __init__(self, channels, reduction = 16, **kwargs):
+    def __init__(self, channels, reduction=16, **kwargs):
         super().__init__(**kwargs)
-        bottleneck = max(1, channels // reduction)
-        self.gap = GlobalAveragePooling2D(keepdims = True)
-        self.d1 = Dense(bottleneck, activation = "relu", use_bias = True)
-        self.d1 = Dense(channels, activation = "sigmoid", use_bias = True)
+        self.channels = channels
+        self.reduction = reduction
+
+        self.gap = GlobalAveragePooling2D(keepdims=True)
+
+    def build(self, input_shape):
+        bottleneck = max(1, self.channels // self.reduction)
+
+        self.fc1 = Dense(bottleneck, activation="relu", use_bias=True)
+        self.fc2 = Dense(self.channels, activation="sigmoid", use_bias=True)
+
+        self.fc1.build((None, 1, 1, self.channels))
+        self.fc2.build((None, 1, 1, bottleneck))
+
+        super().build(input_shape)
 
     def call(self, x):
         scale = self.gap(x)
-        scale = self.d1(scale)
-        scale = self.d1(scale)
+        scale = self.fc1(scale)
+        scale = self.fc2(scale)
         return x * scale
-
-def BNConv(filters, kernel, stride = 1):
-    return tf.keras.Sequential([
-        BatchNormalization(),
-        ReLU(),
-        Conv2D(filters, kernel, strides = stride, padding = "same", use_bias = False, kernel_initializer = "he_normal"),
-    ])
 
 class ResRELU(tf.keras.layers.Layer):
     
