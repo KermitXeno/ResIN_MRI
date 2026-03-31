@@ -352,7 +352,7 @@ if __name__ == "__main__":
     window.resinrelu = resinrelu
     window.resinresnettrans = resinresnettrans
 
-    window.gradcamresnet = GradCAM(model = resinresnettrans, targetlayer = "conv3_block2_out")
+    window.gradcamresnet = GradCAM(model = resinresnettrans, targetlayer = "conv5_block3_out")
     window.gradcamresin = GradCAM(model = resinrelu, targetlayer = "relu_inception_1" )
 
     window.show()
