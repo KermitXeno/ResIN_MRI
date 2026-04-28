@@ -25,8 +25,8 @@ import numpy as np
 from PIL import Image
 import os
 import io
-from GNNpkg.SELUres import ResSELU
-from GNNpkg.SELUincep import SELUInception
+from GNNpkg.SELUselfnorm import SELUInception, SELUResidual 
+
 
 #PIPELINE AND ALL PIPLINE PROBLEMS ARE IN THE GENERATOR AND PREPROCESSING
 def parquet_generator(table):
@@ -91,17 +91,17 @@ def trainResinSELU():
 
         x = Conv2D(128, 3, activation = 'selu', padding = "same", kernel_initializer = "lecun_normal")(inputs)
 
-        x = ResSELU(128)(x)
-        x = ResSELU(128, stride=2)(x)
-        x = SELUInception(128, scale = 0.2)(x)
+        x = SELUResidual(128)(x)
+        x = SELUResidual(128, stride=2)(x)
+        x = SELUInception(128)(x)
 
-        x = ResSELU(128)(x)
-        x = ResSELU(128, stride=2)(x)
-        x = SELUInception(128, scale = 0.3)(x)
+        x = SELUResidual(128)(x)
+        x = SELUResidual(128, stride=2)(x)
+        x = SELUInception(128)(x)
 
-        x = ResSELU(256)(x)
-        x = ResSELU(256, stride=2)(x)
-        x = SELUInception(256, scale = 0.4)(x)
+        x = SELUResidual(256)(x)
+        x = SELUResidual(256, stride=2)(x)
+        x = SELUInception(256)(x)
 
         x = GlobalAveragePooling2D()(x)
 
