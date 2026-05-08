@@ -10,7 +10,10 @@ Q = 1.072
 BETA = 1.0 / math.sqrt(2.0)
 GAMMA = 1.0 / math.sqrt(Q)
 C_V = 0.783
-
+# The _branch_grad_correction function is a custom gradient operation that scales the gradients by a factor of gamma during backpropagation. 
+# This is used to correct for the variance changes introduced by the SELU activation and the residual connections, helping to maintain 
+# self-normalizing properties in the network. By applying this correction, we can ensure that the gradients do not explode or vanish as they 
+# propagate through the layers, which is crucial for training deep networks with SELU activations effectively.
 def _branch_grad_correction(x, gamma=GAMMA):
     @tf.custom_gradient
     def _op(t):
@@ -19,6 +22,11 @@ def _branch_grad_correction(x, gamma=GAMMA):
         return tf.identity(t), _grad
     return _op(x)
 
+# This initializer generates orthogonal weight matrices with a scaling factor that matches the variance of the LeCun normal 
+# initializer, which is optimal for SELU activations. For layers where the fan-in is greater than or equal to the fan-out, it 
+# creates a square orthogonal matrix and then slices it to the desired shape. For layers where the fan-out is greater than the fan-in, 
+# it falls back to a scaled normal distribution. This approach helps maintain self-normalizing properties in deep networks using 
+# SELU activations.
 class OrthogonalLeCunInitializer(initializers.Initializer):
     def __init__(self, seed=None):
         self.seed = seed
@@ -39,6 +47,10 @@ class OrthogonalLeCunInitializer(initializers.Initializer):
     def get_config(self):
         return {"seed": self.seed}
 
+# This layer implements ZCA whitening with a running mean and covariance for use in self-normalizing networks. It uses a full 
+# covariance matrix when the number of channels is small, and a diagonal approximation when the number of channels is large, 
+# to save memory and computation. The whitening is applied per batch during training, and the running statistics are used during 
+# inference. The layer also includes safeguards against non-finite values and extreme outliers.
 class ZCAWhiten(Layer):
     def __init__(self, momentum=0.99, epsilon=1e-5, max_full_channels=128, **kwargs):
         super().__init__(**kwargs)
@@ -106,6 +118,10 @@ class ZCAWhiten(Layer):
                     "max_full_channels": self.max_full_channels})
         return cfg
 
+# This layer implements a residual block with SELU activations and Alpha Dropout. It includes two convolutional layers, 
+# optional downsampling, and a shortcut connection. The gradients are corrected using the _branch_grad_correction function to 
+# maintain self-normalizing properties. The layer also handles non-finite values in the input and applies scaling to the output 
+# to ensure stable training with SELU activations.
 class SELUResidual(Layer):
     def __init__(self, out_channels, stride=1, dropout_rate=0.05, **kwargs):
         super().__init__(**kwargs)
@@ -141,6 +157,9 @@ class SELUResidual(Layer):
                     "dropout_rate": self.dropout_rate})
         return cfg
 
+# This layer implements an Inception-like block with SELU activations and Alpha Dropout. It consists of four parallel branches: 1x1, 3x3, 5x5 convolutions, and a max pooling followed by a 1x1 convolution. 
+# The outputs of the branches are concatenated and passed through ZCA whitening and gradient correction to maintain self-normalizing properties. The layer also includes a residual connection from the input to the output, 
+# with optional projection if the number of channels changes. Non-finite values in the input are handled gracefully to ensure stable training.
 class SELUInception(Layer):
     def __init__(self, channels, zca_momentum=0.99, zca_max_full_ch=128,
                  dropout_rate=0.0, **kwargs):
@@ -184,9 +203,14 @@ class SELUInception(Layer):
                     "zca_max_full_ch": self.zca_max_full_ch, "dropout_rate": self.dropout_rate})
         return cfg
 
+# The block_contraction_rate function calculates the contraction rate of a block in a self-normalizing network based on the depth D. It uses the constant C_V, 
+# which is derived from the properties of the SELU activation function, to determine how much the activations contract as they pass through the layers. 
+# The formula (1.0 + C_V ** D) / 2.0 provides an estimate of this contraction rate, which is crucial for understanding how the network maintains self-normalization 
+# and for setting appropriate learning rates during training.
 def block_contraction_rate(D):
     return (1.0 + C_V ** D) / 2.0
 
+# The lecun_lr function calculates the learning rate for training a self-normalizing network based on the depth D and the Lipschitz constant L_ell of the loss function. It considers three factors:
 def lecun_lr(D, L_ell=1.0):
     C_MAX_SQ = (_LAMBDA_SELU ** 2) * (1.0 + _ALPHA_SELU ** 2) / 2.0
     kappa = block_contraction_rate(D)

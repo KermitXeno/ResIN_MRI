@@ -21,7 +21,7 @@ import numpy as np
 from PIL import Image
 import tensorflow as tf
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Input, Conv2D, GlobalAveragePooling2D, Dense
+from tensorflow.keras.layers import Input, Conv2D, AveragePooling2D, Dense
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 import pyarrow.parquet as pq
 from GNNpkg.SELUselfnorm import SELUInception, SELUResidual, lecun_lr
@@ -61,30 +61,22 @@ def parquet_generator(table):
 
         yield img, np.int32(label)
 
-def preprocess(x, y):
-    x = tf.image.resize(x, (128, 128))
-    x = x * 2.0 - 1.0
-    return x, y
-
 def build_model(num_classes):
     inputs = Input(shape=(128, 128, 3))
-    x = Conv2D(128, 3, padding="same", kernel_initializer="lecun_normal", use_bias=False)(inputs)
+
+    x = Conv2D(64, 3, padding = "same", kernel_initializer = "lecun_normal", use_bias = False)(inputs)
+
+    x = SELUResidual(64)(x)
+    x = SELUResidual(64, stride=2)(x)
+    x = SELUInception(64)(x)
 
     x = SELUResidual(128)(x)
     x = SELUResidual(128, stride=2)(x)
-    x = SELUInception(128)(x)
-
-    x = SELUResidual(128)(x)
-    x = SELUResidual(128, stride=2)(x)
-    x = SELUInception(128)(x)
-
-    x = SELUResidual(256)(x)
-    x = SELUResidual(256, stride=2)(x)
-    x = SELUInception(256)(x)
+    x = SELUInception(64)(x)
 
     x = GlobalAveragePooling2D()(x)
 
-    outputs = Dense(num_classes, kernel_initializer="lecun_normal")(x)
+    outputs = Dense(num_classes, kernel_initializer = "lecun_normal")(x)
 
     return Model(inputs, outputs)
 
