@@ -77,6 +77,10 @@ class ZCAWhiten(Layer):
         if self._full:
             return self._full_zca(flat, orig_shape, n, training, x.dtype)
         return self._diag_zca(flat, orig_shape, training, x.dtype)
+    # The _full_zca method computes the full ZCA whitening transformation using the covariance matrix of the input features. 
+    # It updates the running mean and covariance during training, and applies the whitening transformation to the input. 
+    # The method also includes safeguards against non-finite values in the covariance matrix and the whitened output, ensuring 
+    # numerical stability during training and inference.
     def _full_zca(self, flat, orig_shape, n, training, dtype):
         if training:
             mu = tf.reduce_mean(flat, axis=0)
@@ -94,7 +98,13 @@ class ZCAWhiten(Layer):
         W_zca = tf.stop_gradient(tf.matmul(eigvecs * inv_sqrt[tf.newaxis, :], eigvecs, transpose_b=True))
         whitened = tf.matmul(centered, W_zca, transpose_b=True)
         whitened = tf.where(tf.math.is_finite(whitened), whitened, tf.zeros_like(whitened))
+        # Cast back to the original dtype and reshape to the original shape. The use of tf.where ensures that any non-finite values in the output are replaced with zeros, maintaining numerical stability.
         return tf.reshape(tf.cast(whitened, dtype), orig_shape)
+    # The _diag_zca method computes a diagonal approximation of the ZCA whitening transformation, 
+    # which is more efficient for large numbers of channels. It updates the running mean and variance during training, 
+    # and applies the whitening transformation by normalizing the input features. The method also includes safeguards 
+    # against non-finite values in the variance and the whitened output, ensuring numerical stability during training 
+    # and inference.
     def _diag_zca(self, flat, orig_shape, training, dtype):
         if training:
             mu = tf.reduce_mean(flat, axis=0)
@@ -106,6 +116,7 @@ class ZCAWhiten(Layer):
         std = tf.sqrt(tf.maximum(self.running_var, self.epsilon))
         whitened = centered / std
         whitened = tf.where(tf.math.is_finite(whitened), whitened, tf.zeros_like(whitened))
+        # Cast back to the original dtype and reshape to the original shape. The use of tf.where ensures that any non-finite values in the output are replaced with zeros, maintaining numerical stability.
         return tf.reshape(tf.cast(whitened, dtype), orig_shape)
     def get_config(self):
         cfg = super().get_config()
@@ -140,6 +151,7 @@ class SELUResidual(Layer):
         h = self.dropout(h, training=training)
         h = _branch_grad_correction(h, gamma=GAMMA)
         s = x if self._shortcut_proj is None else self._shortcut_proj(x)
+        # The output is scaled by BETA to maintain the variance properties of the SELU activation
         return BETA * h + BETA * s
     def get_config(self):
         cfg = super().get_config()
@@ -185,6 +197,7 @@ class SELUInception(Layer):
         y = self.zca(y, training=training)
         y = _branch_grad_correction(y, gamma=GAMMA)
         s = x if self._skip_proj is None else self._skip_proj(x)
+        # The output is scaled by BETA to maintain the variance properties of the SELU activation and the residual connection. 
         return BETA * y + BETA * s
     def get_config(self):
         cfg = super().get_config()
