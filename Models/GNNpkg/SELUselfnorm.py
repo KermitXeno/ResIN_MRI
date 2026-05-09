@@ -61,15 +61,11 @@ class ZCAWhiten(Layer):
         c = int(input_shape[-1])
         self._c = c
         self._full = (c <= self.max_full_channels)
-        self.running_mean = self.add_weight(
-            name="running_mean", shape=(c,), initializer="zeros", trainable=False)
+        self.running_mean = self.add_weight(name="running_mean", shape=(c,), initializer="zeros", trainable=False)
         if self._full:
-            self.running_cov = self.add_weight(
-                name="running_cov", shape=(c, c),
-                initializer=tf.keras.initializers.Identity(), trainable=False)
+            self.running_cov = self.add_weight(name="running_cov", shape=(c, c), initializer=tf.keras.initializers.Identity(), trainable=False)
         else:
-            self.running_var = self.add_weight(
-                name="running_var", shape=(c,), initializer="ones", trainable=False)
+            self.running_var = self.add_weight(name="running_var", shape=(c,), initializer="ones", trainable=False)
         super().build(input_shape)
     def call(self, x, training=None):
         c = self._c
@@ -95,8 +91,7 @@ class ZCAWhiten(Layer):
         eigvals, eigvecs = tf.linalg.eigh(self.running_cov)
         eigvals = tf.maximum(eigvals, self.epsilon)
         inv_sqrt = 1.0 / tf.sqrt(eigvals)
-        W_zca = tf.stop_gradient(
-            tf.matmul(eigvecs * inv_sqrt[tf.newaxis, :], eigvecs, transpose_b=True))
+        W_zca = tf.stop_gradient(tf.matmul(eigvecs * inv_sqrt[tf.newaxis, :], eigvecs, transpose_b=True))
         whitened = tf.matmul(centered, W_zca, transpose_b=True)
         whitened = tf.where(tf.math.is_finite(whitened), whitened, tf.zeros_like(whitened))
         return tf.reshape(tf.cast(whitened, dtype), orig_shape)
@@ -114,8 +109,7 @@ class ZCAWhiten(Layer):
         return tf.reshape(tf.cast(whitened, dtype), orig_shape)
     def get_config(self):
         cfg = super().get_config()
-        cfg.update({"momentum": self.momentum, "epsilon": self.epsilon,
-                    "max_full_channels": self.max_full_channels})
+        cfg.update({"momentum": self.momentum, "epsilon": self.epsilon, "max_full_channels": self.max_full_channels})
         return cfg
 
 # This layer implements a residual block with SELU activations and Alpha Dropout. It includes two convolutional layers, 
@@ -128,18 +122,14 @@ class SELUResidual(Layer):
         self.out_channels = out_channels
         self.stride = stride
         self.dropout_rate = dropout_rate
-        self.conv1 = Conv2D(out_channels, 3, padding="same",
-                            kernel_initializer="lecun_normal", use_bias=False)
-        self.conv2 = Conv2D(out_channels, 3, strides=stride, padding="same",
-                            kernel_initializer="lecun_normal", use_bias=False)
+        self.conv1 = Conv2D(out_channels, 3, padding="same", kernel_initializer="lecun_normal", use_bias=False)
+        self.conv2 = Conv2D(out_channels, 3, strides=stride, padding="same", kernel_initializer="lecun_normal", use_bias=False)
         self.dropout = AlphaDropout(dropout_rate)
         self._shortcut_proj = None
     def build(self, input_shape):
         in_c = int(input_shape[-1])
         if self.stride != 1 or in_c != self.out_channels:
-            self._shortcut_proj = Conv2D(self.out_channels, 1, strides=self.stride,
-                                         padding="same", kernel_initializer="lecun_normal",
-                                         use_bias=False)
+            self._shortcut_proj = Conv2D(self.out_channels, 1, strides=self.stride, adding="same", kernel_initializer="lecun_normal", use_bias=False)
         super().build(input_shape)
     def call(self, x, training=None):
         x = tf.where(tf.math.is_finite(x), x, tf.zeros_like(x))
@@ -181,8 +171,7 @@ class SELUInception(Layer):
         in_c = int(input_shape[-1])
         out_c = 4 * self.channels
         if in_c != out_c:
-            self._skip_proj = Conv2D(out_c, 1, padding="same",
-                                     kernel_initializer="lecun_normal", use_bias=False)
+            self._skip_proj = Conv2D(out_c, 1, padding="same", kernel_initializer="lecun_normal", use_bias=False)
         super().build(input_shape)
     def call(self, x, training=None):
         x = tf.where(tf.math.is_finite(x), x, tf.zeros_like(x))
@@ -199,8 +188,7 @@ class SELUInception(Layer):
         return BETA * y + BETA * s
     def get_config(self):
         cfg = super().get_config()
-        cfg.update({"channels": self.channels, "zca_momentum": self.zca_momentum,
-                    "zca_max_full_ch": self.zca_max_full_ch, "dropout_rate": self.dropout_rate})
+        cfg.update({"channels": self.channels, "zca_momentum": self.zca_momentum, "zca_max_full_ch": self.zca_max_full_ch, "dropout_rate": self.dropout_rate})
         return cfg
 
 # The block_contraction_rate function calculates the contraction rate of a block in a self-normalizing network based on the depth D. It uses the constant C_V, 
